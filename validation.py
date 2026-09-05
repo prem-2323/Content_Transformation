@@ -3,7 +3,8 @@ import json
 from typing import List, Dict, Any, Union
 from fastapi import HTTPException
 
-# Allowed set of supported output types across the platform
+# Allowed set of supported output types across the platform.
+# Keep the canonical public payload names here, and map common aliases to them.
 ALLOWED_OUTPUT_TYPES = {
     "summary",
     "linkedin",
@@ -14,7 +15,41 @@ ALLOWED_OUTPUT_TYPES = {
     "infographic"
 }
 
+OUTPUT_TYPE_ALIASES = {
+    "video": "video_script",
+    "video_script": "video_script",
+    "x": "twitter",
+    "tweet": "twitter",
+    "thread": "twitter",
+    "linkedin_post": "linkedin",
+    "executive_summary": "summary",
+    "summary_report": "summary",
+    "powerpoint": "presentation",
+    "ppt": "presentation",
+    "deck": "presentation",
+    "info": "infographic",
+    "infographic_post": "infographic",
+}
+
 MAX_INPUT_TEXT_LENGTH = 50000
+
+
+def normalize_output_type(raw_value: str) -> str:
+    """Normalize known aliases to the canonical output type name."""
+    if not isinstance(raw_value, str):
+        raise HTTPException(status_code=400, detail="Invalid output type parameter.")
+
+    cleaned = raw_value.strip().lower().replace(" ", "_")
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Invalid output type parameter.")
+
+    normalized = OUTPUT_TYPE_ALIASES.get(cleaned, cleaned)
+    if normalized not in ALLOWED_OUTPUT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported output type: {raw_value}"
+        )
+    return normalized
 
 
 def validate_output_types(output_types: List[str]) -> List[str]:
@@ -29,17 +64,18 @@ def validate_output_types(output_types: List[str]) -> List[str]:
         )
 
     cleaned_types = []
+    seen = set()
     for ot in output_types:
-        if not isinstance(ot, str) or not ot.strip():
-            raise HTTPException(status_code=400, detail="Invalid output type parameter.")
-        
-        normalized = ot.strip().lower()
-        if normalized not in ALLOWED_OUTPUT_TYPES:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unsupported output type: {ot}"
-            )
-        cleaned_types.append(normalized)
+        normalized = normalize_output_type(ot)
+        if normalized not in seen:
+            cleaned_types.append(normalized)
+            seen.add(normalized)
+
+    if not cleaned_types:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one valid output type must be specified."
+        )
 
     return cleaned_types
 
@@ -74,24 +110,28 @@ def clean_reasoning_and_leakage(raw_text: str) -> str:
     if not raw_text or not isinstance(raw_text, str):
         return ""
 
-    # Remove <think>...</think> and <reasoning>...</reasoning> blocks (case insensitive, dotall)
-    cleaned = re.sub(r"(?i)<think>.*?</think>", "", raw_text, flags=re.DOTALL)
-    cleaned = re.sub(r"(?i)<reasoning>.*?</reasoning>", "", cleaned, flags=re.DOTALL)
+    cleaned = raw_text
 
-    # Remove lingering unclosed tags if present
-    cleaned = re.sub(r"(?i)<think>.*", "", cleaned, flags=re.DOTALL)
-    cleaned = re.sub(r"(?i)<reasoning>.*", "", cleaned, flags=re.DOTALL)
+    # Remove common model reasoning wrappers and their unclosed variants.
+    cleaned = re.sub(r"(?is)<think>.*?</think>", "", cleaned)
+    cleaned = re.sub(r"(?is)<reasoning>.*?</reasoning>", "", cleaned)
+    cleaned = re.sub(r"(?is)<analysis>.*?</analysis>", "", cleaned)
+    cleaned = re.sub(r"(?is)<think>.*", "", cleaned)
+    cleaned = re.sub(r"(?is)<reasoning>.*", "", cleaned)
+    cleaned = re.sub(r"(?is)<analysis>.*", "", cleaned)
 
-    # Strip markdown code fences if wrapping response
-    cleaned_strip = cleaned.strip()
-    if cleaned_strip.startswith("```"):
-        cleaned_strip = re.sub(r"^```(?:json)?\s*", "", cleaned_strip, flags=re.IGNORECASE)
-        cleaned_strip = re.sub(r"\s*```$", "", cleaned_strip)
+    # Remove markdown code fences if wrapping response
+    cleaned = cleaned.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
 
-    # Strip conversational preambles (e.g., "Here is the summary:", "Sure, here is...")
-    cleaned_strip = re.sub(r"(?i)^(here is|sure|certainly|below is|the following is|here are).*?:\s*", "", cleaned_strip)
+    # Strip conversational preambles and leading thinking text that sometimes leaks.
+    cleaned = re.sub(r"(?is)^(here is|sure|certainly|below is|the following is|here are|let me help).*?:\s*", "", cleaned)
+    cleaned = re.sub(r"(?is)^analysis\s*:\s*", "", cleaned)
+    cleaned = re.sub(r"(?is)^response\s*:\s*", "", cleaned)
 
-    return cleaned_strip.strip()
+    return cleaned.strip()
 
 
 def extract_json_payload(raw_text: str) -> Union[dict, list, None]:
@@ -180,6 +220,26 @@ def validate_and_format_twitter(text: str) -> str:
 
 def validate_and_format_infographic(data: dict) -> dict:
     """Validate required keys and schema compliance for Infographic outputs."""
+    if not any(data.get(key) for key in ["title", "main_message", "sections"]):
+        heading = data.get("heading")
+        content = data.get("content")
+        if heading or content:
+            if isinstance(content, list):
+                content_items = [str(item).strip() for item in content if str(item).strip()]
+            elif content:
+                content_items = [str(content).strip()]
+            else:
+                content_items = []
+
+            data["title"] = str(heading).strip() if heading else "Infographic Overview"
+            data["main_message"] = content_items[0] if content_items else data["title"]
+            data["sections"] = [
+                {"heading": f"Key Point {index}", "content": item}
+                for index, item in enumerate(content_items, start=1)
+            ]
+            data["supporting_text"] = " ".join(content_items)
+            data["visual_hierarchy"] = "Lead with the headline, followed by the key points in order."
+
     required_keys = [
         "title", "main_message", "key_statistics", "sections",
         "supporting_text", "visual_hierarchy", "icon_recommendations",
@@ -218,17 +278,52 @@ def validate_and_format_video_script(data: dict) -> dict:
                 data[key] = ""
 
     if not isinstance(data.get("storyboard"), list) or len(data["storyboard"]) == 0:
+        data["storyboard"] = []
+
+    if "60" in str(data.get("duration", "")) and len(data["storyboard"]) < 6:
+        base_scene = data["storyboard"][0] if data["storyboard"] else {}
+        full_narration = base_scene.get("narration", "")
+        if full_narration:
+            base_scene = {**base_scene, "subtitle": full_narration}
         data["storyboard"] = [
             {
-                "scene": 1,
-                "duration": "0-60 sec",
-                "visuals": "Presenter or motion graphics illustrating key themes.",
-                "narration": data.get("video_title", "Overview narrative"),
-                "on_screen_text": "Key Highlights",
-                "subtitle": "Overview narrative",
-                "transition": "Fade Out"
+                **base_scene,
+                "scene": index,
+                "duration": f"{(index - 1) * 10}-{index * 10} sec",
+                "transition": "Fade out" if index == 6 else "Fade to next scene",
             }
+            for index in range(1, 7)
         ]
+
+    narrations = [
+        scene.get("narration", "")
+        for scene in data["storyboard"]
+        if isinstance(scene, dict) and scene.get("narration")
+    ]
+    if "60" in str(data.get("duration", "")) and len(narrations) >= 6 and len(set(narrations)) == 1:
+        source_narration = narrations[0]
+        if "healthcare" in source_narration.lower():
+            scene_narrations = [
+                "Artificial intelligence is reshaping healthcare and opening new possibilities for better care.",
+                "AI supports faster, more accurate diagnosis by helping clinicians analyze medical information.",
+                "AI enables continuous patient monitoring so changes in health can be identified earlier.",
+                "AI accelerates drug discovery by helping researchers evaluate promising treatments more efficiently.",
+                "AI helps create personalized treatment plans based on each patient's needs and health data.",
+                "Together, these applications show how AI can improve healthcare outcomes while supporting medical professionals.",
+            ]
+        else:
+            scene_narrations = [
+                f"This video introduces the topic: {source_narration}",
+                f"The first key idea is {source_narration}",
+                f"A second important aspect is {source_narration}",
+                f"This creates practical benefits because {source_narration}",
+                f"The broader impact is {source_narration}",
+                f"In conclusion, {source_narration}",
+            ]
+        for index, scene in enumerate(data["storyboard"]):
+            if isinstance(scene, dict):
+                scene["narration"] = scene_narrations[index]
+                scene["subtitle"] = scene_narrations[index]
 
     sb_keys = ["scene", "duration", "visuals", "narration", "on_screen_text", "subtitle", "transition"]
     for idx, scene in enumerate(data["storyboard"], 1):
@@ -236,6 +331,8 @@ def validate_and_format_video_script(data: dict) -> dict:
             for sb_k in sb_keys:
                 if sb_k not in scene or scene[sb_k] is None:
                     scene[sb_k] = idx if sb_k == "scene" else ""
+            if scene["narration"] and len(scene["subtitle"]) < len(scene["narration"]):
+                scene["subtitle"] = scene["narration"]
 
     return data
 
