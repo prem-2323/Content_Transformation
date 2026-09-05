@@ -55,7 +55,8 @@ Content Transformation/
 │   ├── qwen_service.py             # Ollama API client for Qwen3 4B
 │   ├── document_extractor.py       # TXT, PDF, DOCX text extraction
 │   ├── schemas.py                  # Pydantic request & response models
-│   └── routes.py                   # /transform and /transform-file endpoints
+│   ├── routes.py                   # Text, video-audio, and audio download endpoints
+│   └── tts.py                      # edge-tts text-to-MP3 generation
 │
 ├── visual/                         # Member 2 - Visual Processing Subsystem
 │   ├── __init__.py
@@ -65,6 +66,7 @@ Content Transformation/
 │   └── routes.py                   # /visual/analyze endpoint
 │
 ├── requirements.txt                # Consolidated Python dependencies
+├── generated_audio/                # Generated MP3 files
 └── README.md                       # Project documentation
 ```
 
@@ -218,6 +220,28 @@ Generates a structured slide presentation from prompt text or document upload (`
 Content-Type: application/vnd.openxmlformats-officedocument.presentationml.presentation
 Content-Disposition: attachment; filename="presentation.pptx"
 ```
+
+---
+
+### 5. Video Script to MP3 (`POST /generate-video-audio`)
+Converts a generated `video_script` object or raw video-script JSON into one MP3 file. The endpoint extracts each storyboard scene's narration and uses `edge-tts` with the selected neural voice.
+
+**Request Body:**
+```json
+{
+  "video_script": {
+    "video_title": "AI in Healthcare",
+    "storyboard": [
+      {"scene": 1, "narration": "Welcome to the future of healthcare."}
+    ]
+  },
+  "voice": "en-IN-NeerjaNeural"
+}
+```
+
+Use `POST /generate-audio` for plain text, and `GET /audio/{filename}` to stream or download any generated MP3. `GET /audio-voices` lists the recommended US, UK, and India voices.
+
+The complete document flow is: `POST /transform-file` with `output_type=video_script`, then pass `outputs.video_script` to `POST /generate-video-audio`.
 
 ---
 

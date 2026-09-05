@@ -1,13 +1,24 @@
 import json
 import re
+import uuid
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Response
+from fastapi.responses import FileResponse
 from typing import Optional, List
 
 from .qwen_service import QwenServiceError, generate_with_qwen
 from .document_extractor import extract_txt, extract_pdf, extract_docx
-from .schemas import TextRequest, TextResponse, FileTextResponse
+from .schemas import (
+    TextRequest,
+    TextResponse,
+    FileTextResponse,
+    AudioRequest,
+    VideoAudioRequest,
+    AudioResponse
+)
 from .pptx_generator import create_pptx_presentation
+from .tts import generate_audio, RECOMMENDED_VOICES, extract_video_script_narration
 from validation import (
     validate_output_types,
     validate_source_text,
@@ -689,6 +700,105 @@ Important:
         raise
     except Exception as err:
         raise HTTPException(status_code=500, detail=f"PPTX file generation failed: {str(err)}")
+
+
+AUDIO_DIR = Path("generated_audio")
+AUDIO_DIR.mkdir(exist_ok=True)
+
+
+@router.get("/audio-voices")
+def get_audio_voices():
+    """Return available TTS voices including US, UK, and India neural options."""
+    return {
+        "status": "success",
+        "recommended_voices": RECOMMENDED_VOICES
+    }
+
+
+@router.post("/generate-audio", response_model=AudioResponse)
+async def generate_audio_endpoint(request: AudioRequest):
+    """Convert text into an MP3 audio file using edge-tts."""
+    if not request.text or not request.text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Text cannot be empty."
+        )
+
+    filename = f"{uuid.uuid4()}.mp3"
+    output_path = AUDIO_DIR / filename
+
+    try:
+        await generate_audio(
+            text=request.text.strip(),
+            output_file=str(output_path),
+            voice=request.voice
+        )
+    except Exception as err:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Audio generation failed: {str(err)}"
+        )
+
+    return AudioResponse(
+        status="success",
+        filename=filename,
+        audio_path=str(output_path),
+        download_url=f"/audio/{filename}",
+        voice=request.voice
+    )
+
+
+@router.post("/generate-video-audio", response_model=AudioResponse)
+async def generate_video_audio_endpoint(request: VideoAudioRequest):
+    """Extract full video script narration and convert it into a single MP3 audio file."""
+    narration_text = extract_video_script_narration(request.video_script)
+    if not narration_text or not narration_text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Video script does not contain playable narration text."
+        )
+
+    filename = f"video_script_{uuid.uuid4().hex[:8]}.mp3"
+    output_path = AUDIO_DIR / filename
+
+    try:
+        await generate_audio(
+            text=narration_text,
+            output_file=str(output_path),
+            voice=request.voice
+        )
+    except Exception as err:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Video audio generation failed: {str(err)}"
+        )
+
+    return AudioResponse(
+        status="success",
+        filename=filename,
+        audio_path=str(output_path),
+        download_url=f"/audio/{filename}",
+        voice=request.voice
+    )
+
+
+@router.get("/audio/{filename}")
+async def get_audio(filename: str):
+    """Stream or download generated MP3 audio file."""
+    file_path = AUDIO_DIR / filename
+
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Audio file not found."
+        )
+
+    return FileResponse(
+        path=file_path,
+        media_type="audio/mpeg",
+        filename=filename
+    )
+
 
 
 

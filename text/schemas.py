@@ -39,3 +39,22 @@ class TextResponse(BaseModel):
 class FileTextResponse(TextResponse):
     filename: str
     extracted_text: str
+
+
+class AudioRequest(BaseModel):
+    text: str
+    voice: str = "en-US-AriaNeural"
+
+
+class VideoAudioRequest(BaseModel):
+    video_script: Union[Dict[str, Any], str]
+    voice: str = "en-US-AriaNeural"
+
+
+class AudioResponse(BaseModel):
+    status: str = "success"
+    filename: str
+    audio_path: str
+    download_url: str
+    voice: str
+
