@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -8,6 +10,19 @@ from multimodal.routes import router as multimodal_router
 from multimodal.service import gemma_model as multimodal_gemma
 from image.routes import router as image_router
 from video.routes import router as video_router
+
+
+async def close_gemma_clients():
+    await visual_gemma.close()
+    if multimodal_gemma is not visual_gemma:
+        await multimodal_gemma.close()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    yield
+    await close_gemma_clients()
+
 
 app = FastAPI(
     title="Gen AI Platform for Automated Content Transformation",
@@ -24,7 +39,8 @@ app = FastAPI(
         "deepLinking": True,
         "displayRequestDuration": True,
         "defaultModelsExpandDepth": 1,
-    }
+    },
+    lifespan=lifespan,
 )
 
 # Enable CORS for frontend / dashboard integration
@@ -42,15 +58,6 @@ app.include_router(visual_router)
 app.include_router(multimodal_router)
 app.include_router(image_router)
 app.include_router(video_router)
-
-
-async def close_gemma_clients():
-    await visual_gemma.close()
-    if multimodal_gemma is not visual_gemma:
-        await multimodal_gemma.close()
-
-
-app.on_event("shutdown")(close_gemma_clients)
 
 
 MODEL_NAMES = ("qwen3:4b", "gemma3:4b", "stable-diffusion", "edge-tts")

@@ -35,7 +35,7 @@ def test_validate_scenes_rejects_missing_fields_and_invalid_counts():
 
 
 def test_generate_video_scenes_requests_json_mode(monkeypatch):
-    scenes = [make_scene(number) for number in range(1, 6)]
+    scenes = [make_scene(number) for number in range(1, 7)]
     captured = {}
 
     class FakeResponse:
@@ -56,4 +56,9 @@ def test_generate_video_scenes_requests_json_mode(monkeypatch):
     assert captured["json"]["format"] == "json"
     assert f"exactly {scene_generator.DEFAULT_SCENE_COUNT} scenes" in captured["json"]["prompt"]
     assert "Impact or real-world example" in captured["json"]["prompt"]
-    assert len(result["scenes"]) == 5
+    assert len(result["scenes"]) == 6
+    assert result["total_duration"] == 30
+    assert all(
+        set(scene_generator.REQUIRED_SCENE_FIELDS) <= set(scene)
+        for scene in result["scenes"]
+    )

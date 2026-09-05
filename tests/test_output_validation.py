@@ -1,4 +1,7 @@
+import json
+
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
 from validation import (
     clean_reasoning_and_leakage,
@@ -7,6 +10,10 @@ from validation import (
     validate_output_types,
 )
 from text.routes import resolve_form_output_types
+from main import app
+
+
+client = TestClient(app)
 
 
 def test_video_alias_is_normalized_to_video_script():
@@ -25,6 +32,48 @@ def test_unknown_output_type_is_rejected():
 
 def test_swagger_string_placeholder_uses_explicit_output_type():
     assert resolve_form_output_types("summary", "string") == ["summary"]
+
+
+def test_qwen_supports_every_canonical_output_type(monkeypatch):
+    output_types = [
+        "summary", "linkedin", "twitter", "advisory",
+        "presentation", "video_script", "infographic",
+    ]
+
+    def fake_qwen(prompt):
+        output_type = next(
+            output for output in output_types
+            if f"OUTPUT TYPE:\n{output}" in prompt
+        )
+        if output_type in {"summary", "linkedin", "twitter", "advisory"}:
+            return json.dumps({"content": f"Generated {output_type} content."})
+        if output_type == "presentation":
+            return json.dumps({"presentation_title": "AI Overview", "slides": []})
+        if output_type == "infographic":
+            return json.dumps({"title": "AI Overview", "main_message": "A clear takeaway."})
+        return json.dumps({
+            "video_title": "AI Overview",
+            "duration": "60 seconds",
+            "storyboard": [{"narration": "A useful scene."}],
+        })
+
+    monkeypatch.setattr("text.routes.generate_with_qwen", fake_qwen)
+
+    response = client.post(
+        "/transform",
+        json={
+            "text": "Artificial intelligence improves healthcare outcomes.",
+            "output_types": output_types,
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["output_types"] == output_types
+    assert set(data["outputs"]) == set(output_types)
+    assert len(data["outputs"]["presentation"]["slides"]) == 1
+    assert len(data["outputs"]["video_script"]["storyboard"]) == 6
+    assert data["outputs"]["infographic"]["title"] == "AI Overview"
 
 
 def test_think_blocks_are_removed_from_model_output():

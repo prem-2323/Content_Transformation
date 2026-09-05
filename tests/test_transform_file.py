@@ -1,4 +1,5 @@
 import io
+import json
 import pytest
 import pymupdf
 from docx import Document
@@ -123,3 +124,36 @@ def test_transform_file_multiple_outputs():
     assert "summary" in data["outputs"]
     assert "linkedin" in data["outputs"]
     assert "twitter" in data["outputs"]
+
+
+@pytest.mark.parametrize("filename, content_type, source_text, marker", [
+    ("test.txt", "text/plain", "TXT content for transformation.", "TXT content"),
+    ("test.pdf", "application/pdf", "PDF content for transformation.", "PDF content"),
+    ("test.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "DOCX content for transformation.", "DOCX content"),
+])
+def test_transform_file_all_document_types_with_multiple_outputs(
+    monkeypatch, filename, content_type, source_text, marker
+):
+    if filename.endswith(".pdf"):
+        file_bytes = create_sample_pdf(source_text)
+    elif filename.endswith(".docx"):
+        file_bytes = create_sample_docx(source_text)
+    else:
+        file_bytes = source_text.encode("utf-8")
+
+    def fake_qwen(prompt):
+        output_type = prompt.split("OUTPUT TYPE:\n", 1)[1].split("\n", 1)[0]
+        return json.dumps({"content": f"Generated {output_type} content."})
+
+    monkeypatch.setattr("text.routes.generate_with_qwen", fake_qwen)
+
+    response = client.post(
+        "/transform-file",
+        files={"file": (filename, file_bytes, content_type)},
+        data={"output_types": "summary,linkedin,twitter"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert marker in data["extracted_text"]
+    assert set(data["outputs"]) == {"summary", "linkedin", "twitter"}
