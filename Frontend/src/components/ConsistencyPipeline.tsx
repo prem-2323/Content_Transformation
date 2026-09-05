@@ -13,7 +13,10 @@ export const ConsistencyPipeline: React.FC = () => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const res = await consistencyApi.runPipeline({ text: inputText });
+      const res = await consistencyApi.runPipeline({
+        text: inputText,
+        output_types: 'summary,linkedin',
+      });
       setPipelineResult(res);
     } catch (e: any) {
       console.error(e);

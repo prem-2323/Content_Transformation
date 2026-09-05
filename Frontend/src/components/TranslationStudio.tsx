@@ -13,8 +13,7 @@ export const TranslationStudio: React.FC = () => {
 
   useEffect(() => {
     consistencyApi.getLanguages().then(data => {
-      if (Array.isArray(data)) setLanguages(data);
-      else if (data.languages) setLanguages(data.languages);
+      setLanguages(data);
     }).catch(() => {});
   }, []);
 

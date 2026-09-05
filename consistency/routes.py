@@ -47,7 +47,7 @@ async def extract_endpoint(
         # Handle application/json
         if "application/json" in content_type:
             body = await request.json()
-            raw_text = body.get("raw_text")
+            raw_text = body.get("raw_text") or body.get("text")
             url = body.get("url")
             title = body.get("title")
 
@@ -209,7 +209,7 @@ async def full_pipeline_endpoint(
 
         if "application/json" in content_type:
             body = await request.json()
-            raw_text = body.get("raw_text")
+            raw_text = body.get("raw_text") or body.get("text")
             url = body.get("url")
             title = body.get("title")
             output_types = body.get("output_types", output_types)
