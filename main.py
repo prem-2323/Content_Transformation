@@ -5,11 +5,16 @@ from text.routes import router as text_router
 from visual.routes import router as visual_router
 from multimodal.routes import router as multimodal_router
 from image.routes import router as image_router
+from video.routes import router as video_router
 
 app = FastAPI(
     title="Gen AI Platform for Automated Content Transformation",
-    description="Unified AI platform integrating Qwen3 4B for text transformation, Gemma 3 4B for visual analysis, and Multimodal pipeline for PDF text+image extraction.",
-    version="1.0.0",
+    description=(
+        "Unified AI platform integrating Qwen3 4B for text transformation, "
+        "Gemma 3 4B for visual analysis, Multimodal pipeline for PDF text+image extraction, "
+        "and a full video generation pipeline (Qwen3 → Forge SD1.5 → Edge TTS → FFmpeg)."
+    ),
+    version="1.1.0",
     openapi_version="3.0.3",
     docs_url="/docs",
     redoc_url="/redoc",
@@ -34,9 +39,10 @@ app.include_router(text_router)
 app.include_router(visual_router)
 app.include_router(multimodal_router)
 app.include_router(image_router)
+app.include_router(video_router)
 
 
-MODEL_NAMES = ("qwen3:4b", "gemma3:4b", "stable-diffusion")
+MODEL_NAMES = ("qwen3:4b", "gemma3:4b", "stable-diffusion", "edge-tts")
 
 
 @app.get("/models")
@@ -64,9 +70,16 @@ def root():
         "models": {
             "text": "Qwen3 4B (via Ollama)",
             "visual": "Gemma 3 4B (via Ollama)",
-            "image_generation": "Stable Diffusion (via WebUI API)"
+            "image_generation": "Stable Diffusion (via Forge WebUI API)",
+            "tts": "Edge TTS (Microsoft)",
+            "video": "FFmpeg + SD1.5 + Edge TTS pipeline",
         },
-        "docs": "/docs"
+        "endpoints": {
+            "generate_video": "POST /video/generate-video",
+            "get_video": "GET /video/{filename}",
+            "generate_image": "POST /generate-image",
+            "docs": "/docs",
+        }
     }
 
 
