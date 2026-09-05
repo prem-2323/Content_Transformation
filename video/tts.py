@@ -2,11 +2,29 @@ import os
 import edge_tts
 
 RECOMMENDED_VOICES = {
+    # Indian Languages
+    "ta-IN-PallaviNeural": "Tamil (India) - Female (Pallavi)",
+    "ta-IN-ValluvarNeural": "Tamil (India) - Male (Valluvar)",
+    "hi-IN-SwaraNeural": "Hindi (India) - Female (Swara)",
+    "hi-IN-MadhurNeural": "Hindi (India) - Male (Madhur)",
+    "te-IN-ShrutiNeural": "Telugu (India) - Female (Shruti)",
+    "te-IN-MohanNeural": "Telugu (India) - Male (Mohan)",
+    "ml-IN-SobhanaNeural": "Malayalam (India) - Female (Sobhana)",
+    "ml-IN-MidhunNeural": "Malayalam (India) - Male (Midhun)",
+    "kn-IN-SapnaNeural": "Kannada (India) - Female (Sapna)",
+    "kn-IN-GaganNeural": "Kannada (India) - Male (Gagan)",
+    "bn-IN-TanishaaNeural": "Bengali (India) - Female (Tanishaa)",
+    "bn-IN-BashkarNeural": "Bengali (India) - Male (Bashkar)",
+    "mr-IN-AarohiNeural": "Marathi (India) - Female (Aarohi)",
+    "mr-IN-ManoharNeural": "Marathi (India) - Male (Manohar)",
+    "gu-IN-DhwaniNeural": "Gujarati (India) - Female (Dhwani)",
+    "gu-IN-NiranjanNeural": "Gujarati (India) - Male (Niranjan)",
+    "en-IN-NeerjaNeural": "English (India) - Female (Neerja)",
+    "en-IN-PrabhatNeural": "English (India) - Male (Prabhat)",
+    # Global Languages
     "en-US-AriaNeural": "English (US) - Female (Aria)",
     "en-US-GuyNeural": "English (US) - Male (Guy)",
     "en-GB-SoniaNeural": "English (UK) - Female (Sonia)",
-    "en-IN-NeerjaNeural": "English (India) - Female (Neerja)",
-    "en-IN-PrabhatNeural": "English (India) - Male (Prabhat)",
 }
 
 DEFAULT_VOICE = "en-US-AriaNeural"

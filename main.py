@@ -10,6 +10,7 @@ from multimodal.routes import router as multimodal_router
 from multimodal.service import gemma_model as multimodal_gemma
 from image.routes import router as image_router
 from video.routes import router as video_router
+from consistency.routes import router as consistency_router
 
 
 async def close_gemma_clients():
@@ -29,9 +30,10 @@ app = FastAPI(
     description=(
         "Unified AI platform integrating Qwen3 4B for text transformation, "
         "Gemma 3 4B for visual analysis, Multimodal pipeline for PDF text+image extraction, "
-        "and a full video generation pipeline (Qwen3 → Forge SD1.5 → Edge TTS → FFmpeg)."
+        "Video generation pipeline (Qwen3 → Forge SD1.5 → Edge TTS → FFmpeg), "
+        "and a Full Content Consistency Engine (UCKR + Atomic Fact IDs + Registry + Grounded Generators)."
     ),
-    version="1.1.0",
+    version="1.2.0",
     openapi_version="3.0.3",
     docs_url="/docs",
     redoc_url="/redoc",
@@ -58,6 +60,7 @@ app.include_router(visual_router)
 app.include_router(multimodal_router)
 app.include_router(image_router)
 app.include_router(video_router)
+app.include_router(consistency_router)
 
 
 MODEL_NAMES = ("qwen3:4b", "gemma3:4b", "stable-diffusion", "edge-tts")
@@ -91,8 +94,14 @@ def root():
             "image_generation": "Stable Diffusion (via Forge WebUI API)",
             "tts": "Edge TTS (Microsoft)",
             "video": "FFmpeg + SD1.5 + Edge TTS pipeline",
+            "consistency_engine": "UCKR + Fact Registry + Grounded Multi-Channel Generators"
         },
         "endpoints": {
+            "consistency_pipeline": "POST /consistency/pipeline",
+            "consistency_extract": "POST /consistency/extract",
+            "consistency_analyze": "POST /consistency/analyze",
+            "consistency_generate": "POST /consistency/generate",
+            "consistency_registry": "GET /consistency/registry/{source_id}/facts",
             "generate_video": "POST /video/generate-video",
             "get_video": "GET /video/{filename}",
             "generate_image": "POST /generate-image",
