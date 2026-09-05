@@ -12,12 +12,13 @@ export const AudioStudio: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    audioApi.getVoices().then(data => {
-      if (Array.isArray(data)) setVoices(data);
-      else if (data.voices) setVoices(data.voices);
-    }).catch(e => {
-      setVoices([{ id: 'en-US-AriaNeural', name: 'en-US-AriaNeural (Default)' }]);
-    });
+    audioApi.getVoices()
+      .then((data) => {
+        setVoices(data);
+      })
+      .catch(() => {
+        setVoices([{ id: 'en-US-AriaNeural', name: 'en-US-AriaNeural (Default)' }]);
+      });
   }, []);
 
   const handleGenerate = async (e: React.FormEvent) => {
