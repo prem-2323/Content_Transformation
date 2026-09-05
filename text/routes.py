@@ -40,9 +40,26 @@ Keep each slide concise.
 """,
 
     "video_script": """
-Create a video script.
-Include a hook, main content, transitions, and a conclusion.
-Make it natural for spoken narration.
+Create a Complete Video Package and production storyboard.
+Return ONLY valid JSON (no markdown formatting, no code fences) with exactly these keys:
+{
+  "video_title": "Catchy and professional title for the video",
+  "duration": "Total estimated duration (e.g. 60 seconds)",
+  "storyboard": [
+    {
+      "scene": 1,
+      "duration": "0-10 sec",
+      "visuals": "Detailed description of B-roll or visual elements",
+      "narration": "Voiceover script text for this scene",
+      "on_screen_text": "Key text or title callouts displayed on screen",
+      "subtitle": "Subtitle text for accessibility",
+      "transition": "Transition effect to next scene (e.g. Cut, Fade to Black, Wipe Left)"
+    }
+  ],
+  "music_recommendation": "Suggested background music genre, tempo, and mood",
+  "voice_over_direction": "Tone, pacing, emotion, and accent guidance for the voiceover artist",
+  "thumbnail_recommendation": "Description for an engaging video thumbnail concept"
+}
 """,
 
     "infographic": """
@@ -67,8 +84,9 @@ Return ONLY valid JSON (no markdown formatting, no code fences) with exactly the
 
 
 def parse_output_content(generated_text: str, output_type: str):
-    """Parse generated text into structured dict if infographic or valid JSON, else return raw string."""
-    if output_type.lower() != "infographic":
+    """Parse generated text into structured dict if infographic, video_script, or valid JSON, else return raw string."""
+    ot_lower = output_type.lower()
+    if ot_lower not in ["infographic", "video_script"]:
         return generated_text
 
     cleaned = generated_text.strip()
@@ -78,32 +96,72 @@ def parse_output_content(generated_text: str, output_type: str):
     try:
         data = json.loads(cleaned)
         if isinstance(data, dict):
-            required_keys = [
-                "title", "main_message", "key_statistics", "sections",
-                "supporting_text", "visual_hierarchy", "icon_recommendations",
-                "color_recommendations", "layout_recommendation"
-            ]
-            for key in required_keys:
-                if key not in data:
-                    if key in ["key_statistics", "sections", "icon_recommendations", "color_recommendations"]:
-                        data[key] = []
-                    else:
-                        data[key] = ""
-            return data
+            if ot_lower == "infographic":
+                required_keys = [
+                    "title", "main_message", "key_statistics", "sections",
+                    "supporting_text", "visual_hierarchy", "icon_recommendations",
+                    "color_recommendations", "layout_recommendation"
+                ]
+                for key in required_keys:
+                    if key not in data:
+                        if key in ["key_statistics", "sections", "icon_recommendations", "color_recommendations"]:
+                            data[key] = []
+                        else:
+                            data[key] = ""
+                return data
+            elif ot_lower == "video_script":
+                required_keys = [
+                    "video_title", "duration", "storyboard",
+                    "music_recommendation", "voice_over_direction", "thumbnail_recommendation"
+                ]
+                for key in required_keys:
+                    if key not in data:
+                        if key == "storyboard":
+                            data[key] = []
+                        else:
+                            data[key] = ""
+                if isinstance(data.get("storyboard"), list):
+                    sb_keys = ["scene", "duration", "visuals", "narration", "on_screen_text", "subtitle", "transition"]
+                    for idx, scene in enumerate(data["storyboard"], 1):
+                        if isinstance(scene, dict):
+                            for sb_k in sb_keys:
+                                if sb_k not in scene:
+                                    scene[sb_k] = idx if sb_k == "scene" else ""
+                return data
     except Exception:
         pass
 
-    return {
-        "title": "Infographic Summary",
-        "main_message": generated_text[:150] if len(generated_text) > 150 else generated_text,
-        "key_statistics": [],
-        "sections": [{"heading": "Key Highlights", "content": generated_text}],
-        "supporting_text": generated_text,
-        "visual_hierarchy": "Primary focus on Title and Main Message, followed by Key Highlights.",
-        "icon_recommendations": ["chart", "lightbulb"],
-        "color_recommendations": ["Primary", "Accent", "Background"],
-        "layout_recommendation": "Single-column vertical stack layout with highlighted stats."
-    }
+    if ot_lower == "infographic":
+        return {
+            "title": "Infographic Summary",
+            "main_message": generated_text[:150] if len(generated_text) > 150 else generated_text,
+            "key_statistics": [],
+            "sections": [{"heading": "Key Highlights", "content": generated_text}],
+            "supporting_text": generated_text,
+            "visual_hierarchy": "Primary focus on Title and Main Message, followed by Key Highlights.",
+            "icon_recommendations": ["chart", "lightbulb"],
+            "color_recommendations": ["Primary", "Accent", "Background"],
+            "layout_recommendation": "Single-column vertical stack layout with highlighted stats."
+        }
+    elif ot_lower == "video_script":
+        return {
+            "video_title": "Video Overview",
+            "duration": "60 seconds",
+            "storyboard": [
+                {
+                    "scene": 1,
+                    "duration": "0-60 sec",
+                    "visuals": "Presenter or dynamic graphics illustrating the content.",
+                    "narration": generated_text,
+                    "on_screen_text": "Key Highlights",
+                    "subtitle": generated_text,
+                    "transition": "Fade Out"
+                }
+            ],
+            "music_recommendation": "Uplifting ambient background music",
+            "voice_over_direction": "Professional, engaging, and clear delivery",
+            "thumbnail_recommendation": "High contrast headline text with modern tech graphic"
+        }
 
 
 def resolve_form_output_types(output_type: Optional[str] = None, output_types: Optional[str] = None) -> List[str]:

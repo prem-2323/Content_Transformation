@@ -125,10 +125,12 @@ Transforms raw text content into selected deliverable.
 
 **Supported output types**: `linkedin`, `twitter`, `summary`, `advisory`, `presentation`, `video_script`, `infographic`.
 
+*Note: `infographic` and `video_script` return rich structured JSON objects containing visual hierarchy/storyboards, scene visual descriptions, music recommendations, voice-over directions, and thumbnail concepts.*
+
 **Sample Multi-Output Response (`JSON`):**
 ```json
 {
-  "output_types": ["summary", "linkedin", "presentation"],
+  "output_types": ["summary", "video_script", "infographic"],
   "audience": "Tech Professionals",
   "tone": "Professional",
   "language": "English",
@@ -136,8 +138,35 @@ Transforms raw text content into selected deliverable.
   "objective": "Inform",
   "outputs": {
     "summary": "AI summary content...",
-    "linkedin": "LinkedIn post content...",
-    "presentation": "Presentation slide bullet points..."
+    "video_script": {
+      "video_title": "AI Transformation in 2026",
+      "duration": "60 seconds",
+      "storyboard": [
+        {
+          "scene": 1,
+          "duration": "0-10 sec",
+          "visuals": "Futuristic digital city with data overlays",
+          "narration": "Artificial Intelligence is transforming enterprise software...",
+          "on_screen_text": "78% Enterprise AI Adoption",
+          "subtitle": "Artificial Intelligence is transforming enterprise software...",
+          "transition": "Fade to Next Scene"
+        }
+      ],
+      "music_recommendation": "Modern ambient electronic track",
+      "voice_over_direction": "Confident, clear, and articulate narrative tone",
+      "thumbnail_recommendation": "High contrast title text over glowing digital network graphic"
+    },
+    "infographic": {
+      "title": "AI Impact Overview",
+      "main_message": "Key adoption statistics...",
+      "key_statistics": ["78% adoption"],
+      "sections": [],
+      "supporting_text": "...",
+      "visual_hierarchy": "...",
+      "icon_recommendations": [],
+      "color_recommendations": [],
+      "layout_recommendation": "..."
+    }
   }
 }
 ```
