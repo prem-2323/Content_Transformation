@@ -350,6 +350,7 @@ class GenerateDeliverablesResponse(BaseModel):
     consistency_audit: Dict[str, Any]
     validation_report: Optional[DetailedValidationReport] = None
     repair_result: Optional[AutoRepairResult] = None
+    quality_report: Optional[Dict[str, Any]] = None
 
 
 class ConsistencyAuditResult(BaseModel):
@@ -361,3 +362,45 @@ class ConsistencyAuditResult(BaseModel):
     unreferenced_critical_facts: List[FactItem] = Field(default_factory=list)
     traceability_matrix: Dict[str, List[str]] = Field(default_factory=dict)
     cross_channel_consistency_score: float
+
+
+# ---------------------------------------------------------------------------
+# AI Content Quality Scoring Models
+# ---------------------------------------------------------------------------
+
+class QualityDimensionScore(BaseModel):
+    name: str = Field(..., description="Name of the quality dimension")
+    score: float = Field(..., ge=0.0, le=100.0, description="Dimension score 0-100")
+    grade: str = Field(default="A", description="Letter grade: A+, A, B, C, D")
+    feedback: str = Field(default="", description="Detailed qualitative feedback")
+    details: Dict[str, Any] = Field(default_factory=dict, description="Underlying quantitative metrics")
+
+
+class ContentQualityReport(BaseModel):
+    channel: str = Field(default="text", description="Channel or document evaluated")
+    overall_score: float = Field(..., ge=0.0, le=100.0, description="Weighted composite quality score 0-100")
+    overall_grade: str = Field(..., description="Overall letter grade: A+, A, B, C, Needs Improvement")
+    readability: QualityDimensionScore
+    engagement_and_hook: QualityDimensionScore
+    information_density: QualityDimensionScore
+    tone_and_audience: QualityDimensionScore
+    structural_coherence: QualityDimensionScore
+    fact_grounding: QualityDimensionScore
+    strengths: List[str] = Field(default_factory=list, description="Key positive attributes")
+    recommendations: List[str] = Field(default_factory=list, description="Actionable improvement suggestions")
+
+
+class DeliverablesQualityReport(BaseModel):
+    status: str = "success"
+    overall_average_score: float = Field(..., ge=0.0, le=100.0)
+    overall_grade: str = Field(..., description="Composite grade across all deliverables")
+    channels: Dict[str, ContentQualityReport] = Field(default_factory=dict)
+    summary: str = Field(default="", description="High level summary of quality assessment")
+
+
+class QualityScoreRequest(BaseModel):
+    text: Optional[str] = None
+    outputs: Optional[Dict[str, Any]] = None
+    uckr: Optional[UCKR] = None
+    target_audience: str = "Professional"
+    target_tone: str = "Authoritative and engaging"

@@ -16,7 +16,10 @@ from .schemas import (
     ConsistencyAuditResult,
     DetailedValidationReport,
     UCKRDiff,
-    SelectiveRegenerationResponse
+    SelectiveRegenerationResponse,
+    QualityScoreRequest,
+    ContentQualityReport,
+    DeliverablesQualityReport
 )
 from .engine import ConsistencyEngine
 from .fact_registry import get_registry, get_or_create_registry, FactRegistry
@@ -24,6 +27,7 @@ from .validators import ConsistencyValidator
 from .repair import AutoRepairEngine
 from .versioning import UCKRVersionManager
 from .multilingual import LANGUAGE_REGISTRY, normalize_language_name, get_voice_for_language, MultilingualTransformer
+from .quality_scorer import ContentQualityScorer
 
 router = APIRouter(prefix="/consistency", tags=["Content Consistency Engine"])
 
@@ -165,7 +169,10 @@ async def generate_deliverables_endpoint(
         return GenerateDeliverablesResponse(
             source_id=results["source_id"],
             outputs=results["outputs"],
-            consistency_audit=results["consistency_audit"]
+            consistency_audit=results["consistency_audit"],
+            validation_report=results.get("validation_report"),
+            repair_result=results.get("repair_result"),
+            quality_report=results.get("quality_report")
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Deliverable generation failed: {str(e)}")
@@ -415,3 +422,48 @@ async def regenerate_affected_endpoint(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Selective regeneration failed: {str(e)}")
+
+
+@router.post("/quality-score")
+async def quality_score_endpoint(
+    request: QualityScoreRequest
+):
+    """
+    AI Content Quality Scoring Engine:
+    Evaluates text or generated multi-channel deliverables across 6 quantitative dimensions:
+    - Readability & Clarity (Flesch Reading Ease & Grade Level)
+    - Engagement & Hook Strength
+    - Information Density & Conciseness (metric ratio & filler reduction)
+    - Tone & Audience Alignment
+    - Structural Coherence & Flow
+    - Fact Grounding & Attribution Index
+    Outputs numerical scores (0-100), letter grades (A+, A, B, C), key strengths, and improvement suggestions.
+    """
+    try:
+        if request.outputs:
+            report = ContentQualityScorer.evaluate_deliverables(
+                outputs=request.outputs,
+                uckr=request.uckr,
+                target_audience=request.target_audience,
+                target_tone=request.target_tone
+            )
+            return report.model_dump()
+
+        if request.text:
+            report = ContentQualityScorer.evaluate_text(
+                text=request.text,
+                channel="text",
+                uckr=request.uckr,
+                target_audience=request.target_audience,
+                target_tone=request.target_tone
+            )
+            return report.model_dump()
+
+        raise HTTPException(
+            status_code=400,
+            detail="Must provide either 'text' or 'outputs' in the QualityScoreRequest."
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Content quality scoring failed: {str(e)}")

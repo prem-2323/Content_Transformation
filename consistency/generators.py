@@ -107,11 +107,23 @@ class SummaryGenerator:
         except Exception as e:
             logger.warning(f"SummaryGenerator LLM fallback: {e}")
 
-        # Deterministic Grounded Fallback
+        # Deterministic Grounded Fallback with Audience Calibration
         top_facts = sorted(uckr.facts, key=lambda x: x.importance, reverse=True)[:4]
         summary_sentences = [f.statement for f in top_facts]
         takeaways = [f"• {f.statement}" for f in top_facts[:3]]
-        fallback_text = f"{uckr.summary} " + " ".join(summary_sentences)
+        
+        aud_lower = (config.audience or "professional").lower()
+        if "exec" in aud_lower or "c-suite" in aud_lower or "leadership" in aud_lower:
+            intro_prefix = f"Executive Strategic Briefing on {uckr.core_topic}:"
+            footer = "Strategic Implication: Prioritize operational integration and capital allocation based on verified capabilities."
+        elif "tech" in aud_lower or "eng" in aud_lower or "dev" in aud_lower:
+            intro_prefix = f"Technical Implementation Overview ({uckr.core_topic}):"
+            footer = "Architectural Note: System parameters and benchmarks validated against source documentation."
+        else:
+            intro_prefix = f"Understanding {uckr.core_topic}:"
+            footer = "Key takeaway: These innovations represent significant advancements across the sector."
+
+        fallback_text = f"{intro_prefix} {uckr.summary} " + " ".join(summary_sentences) + f" {footer}"
         return GroundedSummary(
             text=fallback_text,
             key_takeaways=takeaways,
@@ -135,7 +147,7 @@ AUDIENCE: {audience}
 TONE: {tone}
 
 TASK:
-Create an engaging LinkedIn post with a strong hook, clear body insights, takeaways, and hashtags.
+Create an engaging LinkedIn post with a strong hook tailored specifically for {audience}, clear body insights, takeaways, and hashtags.
 GROUND your post in the provided facts and list ALL fact IDs referenced in `source_facts`.
 
 RETURN ONLY VALID JSON matching this structure:
@@ -150,7 +162,7 @@ RETURN ONLY VALID JSON matching this structure:
 
 
 class LinkedInGenerator:
-    """Generates grounded LinkedIn post from UCKR."""
+    """Generates grounded LinkedIn post from UCKR tailored to audience."""
 
     @staticmethod
     def generate(uckr: UCKR, config: OutputGenerationConfig) -> GroundedLinkedIn:
@@ -179,14 +191,25 @@ class LinkedInGenerator:
         except Exception as e:
             logger.warning(f"LinkedInGenerator LLM fallback: {e}")
 
-        # Deterministic Grounded Fallback
+        # Deterministic Grounded Fallback with Audience Tailoring
         top_facts = sorted(uckr.facts, key=lambda x: x.importance, reverse=True)[:3]
         facts_text = "\n\n".join([f"🔹 {f.statement}" for f in top_facts])
-        headline = f"How {uckr.core_topic} is Reshaping Industry Dynamics"
+        
+        aud_lower = (config.audience or "professional").lower()
+        if "exec" in aud_lower or "c-suite" in aud_lower:
+            headline = f"Strategic Leadership: Why {uckr.core_topic} Matters for the C-Suite 📈"
+            cta = "Leaders: How is your organization addressing this in upcoming roadmap cycles?"
+        elif "tech" in aud_lower or "eng" in aud_lower:
+            headline = f"Deep Dive: Engineering Architecture Behind {uckr.core_topic} ⚙️"
+            cta = "Engineers & architects: What are your perspectives on these technical benchmarks?"
+        else:
+            headline = f"How {uckr.core_topic} is Reshaping Industry Dynamics 🚀"
+            cta = "Share your perspective in the comments below!"
+
         body = (
             f"🚀 Transforming how we approach {uckr.core_topic}.\n\n"
             f"{uckr.summary}\n\n"
-            f"Key insights to know:\n{facts_text}\n\n"
+            f"Key verified insights:\n{facts_text}\n\n"
             f"The pace of innovation is accelerating. Are you prepared?"
         )
         hashtags = [f"#{c.replace(' ', '')}" for c in uckr.key_concepts[:4]] or ["#Tech", "#Innovation"]
@@ -194,7 +217,7 @@ class LinkedInGenerator:
             headline=headline,
             post_content=body,
             hashtags=hashtags,
-            call_to_action="Share your perspective in the comments below!",
+            call_to_action=cta,
             source_facts=[f.id for f in top_facts],
             provenance=ProvenanceTracker.extract_provenance(body, uckr)
         )

@@ -133,6 +133,15 @@ class ConsistencyEngine:
                 uckr=uckr
             )
 
+        # Step 22: AI Content Quality Scoring across 6 dimensions
+        from .quality_scorer import ContentQualityScorer
+        quality_report = ContentQualityScorer.evaluate_deliverables(
+            outputs=outputs,
+            uckr=uckr,
+            target_audience=cfg.audience,
+            target_tone=cfg.tone
+        ).model_dump()
+
         return {
             "source_id": uckr.document.id,
             "document_title": uckr.document.title,
@@ -140,7 +149,8 @@ class ConsistencyEngine:
             "outputs": outputs,
             "consistency_audit": audit_result.model_dump(),
             "validation_report": validation_report.model_dump(),
-            "repair_result": repair_result
+            "repair_result": repair_result,
+            "quality_report": quality_report
         }
 
     @classmethod
@@ -166,7 +176,7 @@ class ConsistencyEngine:
         # 3 & 4: Understand & Build UCKR
         uckr = cls.analyze(normalized_source)
 
-        # 5 through 18: Registry, Grounded Generation, Deep Validation & Auto Repair
+        # 5 through 22: Registry, Grounded Generation, Deep Validation, Auto Repair & Quality Scoring
         generation_results = cls.generate_deliverables(uckr=uckr, config=config)
 
         return {
@@ -176,5 +186,6 @@ class ConsistencyEngine:
             "outputs": generation_results["outputs"],
             "consistency_audit": generation_results["consistency_audit"],
             "validation_report": generation_results.get("validation_report"),
-            "repair_result": generation_results.get("repair_result")
+            "repair_result": generation_results.get("repair_result"),
+            "quality_report": generation_results.get("quality_report")
         }
