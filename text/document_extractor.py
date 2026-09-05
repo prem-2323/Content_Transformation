@@ -1,6 +1,7 @@
 import io
 from pypdf import PdfReader
 from docx import Document
+import pymupdf
 
 
 def extract_txt(file) -> str:
@@ -14,18 +15,29 @@ def extract_txt(file) -> str:
 
 
 def extract_pdf(file) -> str:
-    """Extract text from uploaded PDF file safely using BytesIO."""
+    """Extract text from uploaded PDFs, with a fallback for difficult PDFs."""
     file.file.seek(0)
     pdf_bytes = file.file.read()
-    pdf_stream = io.BytesIO(pdf_bytes)
 
-    reader = PdfReader(pdf_stream)
-    text = ""
-    for page in reader.pages:
-        page_text = page.extract_text()
-        if page_text:
-            text += page_text + "\n"
-    return text
+    try:
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        text = "\n".join(
+            page_text
+            for page in reader.pages
+            if (page_text := page.extract_text())
+        ).strip()
+        if text:
+            return text
+    except Exception:
+        pass
+
+    # PyMuPDF handles PDFs with unusual text encodings more consistently.
+    with pymupdf.open(stream=pdf_bytes, filetype="pdf") as document:
+        return "\n".join(
+            page.get_text("text")
+            for page in document
+            if page.get_text("text")
+        ).strip()
 
 
 def extract_docx(file) -> str:

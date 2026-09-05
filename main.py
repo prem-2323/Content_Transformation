@@ -34,6 +34,26 @@ app.include_router(visual_router)
 app.include_router(multimodal_router)
 
 
+MODEL_NAMES = ("qwen3:4b", "gemma3:4b")
+
+
+@app.get("/models")
+@app.get("/v1/models")
+def list_models():
+    """Expose the locally configured models for client discovery."""
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": model_name,
+                "object": "model",
+                "owned_by": "ollama",
+            }
+            for model_name in MODEL_NAMES
+        ],
+    }
+
+
 @app.get("/")
 def root():
     return {

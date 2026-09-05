@@ -353,19 +353,23 @@ def _fallback_output(output_type: str, source_text: str):
     return source_text
 
 
-def resolve_form_output_types(output_type: Optional[str] = None, output_types: Optional[str] = None) -> List[str]:
+def resolve_form_output_types(output_type: str | None = None, output_types: str | None = None) -> List[str]:
     """Parse output_types form input (comma separated or JSON list) or fallback to output_type."""
-    if output_types:
+    if output_types and output_types.strip():
         raw = output_types.strip()
         if raw.startswith("[") and raw.endswith("]"):
             try:
                 parsed = json.loads(raw)
                 if isinstance(parsed, list):
-                    return [str(item).strip() for item in parsed if item]
+                    items = [str(item).strip() for item in parsed if item and str(item).strip()]
+                    if items:
+                        return items
             except Exception:
                 pass
-        return [item.strip() for item in raw.split(",") if item.strip()]
-    if output_type:
+        items = [item.strip() for item in raw.split(",") if item and item.strip()]
+        if items:
+            return items
+    if output_type and output_type.strip():
         return [output_type.strip()]
     return ["summary"]
 
@@ -447,8 +451,8 @@ CRITICAL OUTPUT CONSTRAINTS:
 @router.post("/transform-file", response_model=FileTextResponse)
 async def transform_file(
     file: UploadFile = File(...),
-    output_type: Optional[str] = Form(None),
-    output_types: Optional[str] = Form(None, description="Comma-separated or JSON list of output types, e.g. summary,linkedin"),
+    output_type: str | None = Form(None),
+    output_types: str | None = Form(None, description="Comma-separated or JSON list of output types, e.g. summary,linkedin"),
     audience: str = Form("General public"),
     tone: str = Form("Professional"),
     language: str = Form("English"),
@@ -529,8 +533,11 @@ Important:
 - Return only the transformed content.
 """
 
-            generated_text = generate_with_qwen(prompt)
-            outputs_dict[ot] = parse_output_content(generated_text, ot)
+            try:
+                generated_text = generate_with_qwen(prompt)
+                outputs_dict[ot] = parse_output_content(generated_text, ot, valid_text)
+            except QwenServiceError:
+                outputs_dict[ot] = _fallback_output(ot, valid_text)
 
         first_type = target_types[0]
 

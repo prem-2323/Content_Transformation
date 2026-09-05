@@ -116,6 +116,10 @@ def clean_reasoning_and_leakage(raw_text: str) -> str:
     cleaned = re.sub(r"(?is)<think>.*?</think>", "", cleaned)
     cleaned = re.sub(r"(?is)<reasoning>.*?</reasoning>", "", cleaned)
     cleaned = re.sub(r"(?is)<analysis>.*?</analysis>", "", cleaned)
+    # Some Ollama responses omit the opening reasoning tag but keep </think>.
+    orphan_think_end = re.search(r"(?is)</think>\s*", cleaned)
+    if orphan_think_end:
+        cleaned = cleaned[orphan_think_end.end():]
     cleaned = re.sub(r"(?is)<think>.*", "", cleaned)
     cleaned = re.sub(r"(?is)<reasoning>.*", "", cleaned)
     cleaned = re.sub(r"(?is)<analysis>.*", "", cleaned)

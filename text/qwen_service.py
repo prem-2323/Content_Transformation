@@ -3,7 +3,7 @@ import requests
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL_NAME = "qwen3:4b"
-REQUEST_TIMEOUT_SECONDS = 45
+REQUEST_TIMEOUT_SECONDS = 180
 
 
 class QwenServiceError(Exception):
@@ -26,7 +26,7 @@ def generate_with_qwen(prompt: str) -> str:
         response = requests.post(
             OLLAMA_URL,
             json=payload,
-            timeout=REQUEST_TIMEOUT_SECONDS
+            timeout=(3.0, REQUEST_TIMEOUT_SECONDS)
         )
         response.raise_for_status()
     except requests.exceptions.Timeout as error:
