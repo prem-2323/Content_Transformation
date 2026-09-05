@@ -65,6 +65,12 @@ Content Transformation/
 │   ├── schemas.py                  # Pydantic request & response models
 │   └── routes.py                   # /visual/analyze endpoint
 │
+├── image/                           # Image generation subsystem
+│   ├── generator.py                 # Stable Diffusion WebUI API adapter
+│   ├── prompt_engine.py             # Qwen-powered scene prompt generation
+│   ├── service.py                   # PNG validation and storage
+│   └── routes.py                    # Direct and scene image endpoints
+│
 ├── requirements.txt                # Consolidated Python dependencies
 ├── generated_audio/                # Generated MP3 files
 └── README.md                       # Project documentation
@@ -87,6 +93,20 @@ ollama pull qwen3:4b
 # Pull Gemma 3 4B model for visual analysis
 ollama pull gemma3:4b
 ```
+
+Image generation uses a local Stable Diffusion WebUI-compatible server with its
+API enabled. By default the API is expected at `http://127.0.0.1:7860`. Override
+it with `IMAGE_MODEL_URL` when needed.
+
+To install the Forge backend without committing its checkout, model weights, or
+virtual environment, run this from PowerShell:
+
+```powershell
+.\scripts\setup_image_backend.ps1
+```
+
+The script stores Forge beside this project, downloads the SD 1.5 checkpoint with
+resume support, and creates `start-image-api.bat` with RTX 3050-friendly settings.
 
 ### Step 2: Install Python Dependencies
 Navigate to the `Content Transformation` directory:
@@ -177,6 +197,25 @@ Transforms raw text content into selected deliverable.
 
 ### 2. Document File Transformation (`POST /transform-file`)
 Extracts text from `.txt`, `.pdf`, or `.docx` files and transforms it into the requested format(s).
+
+### 3. Direct Image Generation (`POST /generate-image`)
+
+Generates one PNG from a user prompt through the configured Stable Diffusion API.
+
+```json
+{
+  "prompt": "A futuristic smart city using artificial intelligence"
+}
+```
+
+The response includes `filename` and `image_path`. Retrieve the image with
+`GET /image/{filename}`.
+
+### 4. Content-to-Scene Images (`POST /generate-scene-images`)
+
+Accepts a video script or source text, asks Qwen3 to create one detailed prompt
+per scene, and renders the resulting images. For TXT, PDF, and DOCX uploads,
+use `POST /generate-scene-images-from-file`.
 
 **Form Data:**
 - `file`: Uploaded file (`.txt`, `.pdf`, `.docx`)

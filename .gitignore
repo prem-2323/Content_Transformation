@@ -53,7 +53,10 @@ ollama/
 uploads/
 outputs/
 generated/
-
+generated_audio/
+generated_images/
+stable-diffusion-webui-forge/
+stable-diffusion-webui-forge
 # Runtime logs and local databases
 *.log
 *.sqlite

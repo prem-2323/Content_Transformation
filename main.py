@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from text.routes import router as text_router
 from visual.routes import router as visual_router
 from multimodal.routes import router as multimodal_router
+from image.routes import router as image_router
 
 app = FastAPI(
     title="Gen AI Platform for Automated Content Transformation",
@@ -32,9 +33,10 @@ app.add_middleware(
 app.include_router(text_router)
 app.include_router(visual_router)
 app.include_router(multimodal_router)
+app.include_router(image_router)
 
 
-MODEL_NAMES = ("qwen3:4b", "gemma3:4b")
+MODEL_NAMES = ("qwen3:4b", "gemma3:4b", "stable-diffusion")
 
 
 @app.get("/models")
@@ -61,7 +63,8 @@ def root():
         "message": "Gen AI Content Transformation Platform is active",
         "models": {
             "text": "Qwen3 4B (via Ollama)",
-            "visual": "Gemma 3 4B (via Ollama)"
+            "visual": "Gemma 3 4B (via Ollama)",
+            "image_generation": "Stable Diffusion (via WebUI API)"
         },
         "docs": "/docs"
     }
