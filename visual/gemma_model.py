@@ -1,7 +1,39 @@
 import base64
+import hashlib
 import io
 import json
+import asyncio
+from PIL import Image
 import httpx
+
+
+MAX_IMAGE_SIZE = 1024
+GEMMA_REQUEST_TIMEOUT_SECONDS = 120.0
+
+
+# ---------------------------------------------------------------------------
+# In-memory cache: SHA-256(JPEG bytes) → structured Gemma analysis result
+# Resets on server restart — zero extra infrastructure required.
+# ---------------------------------------------------------------------------
+IMAGE_ANALYSIS_CACHE: dict[str, dict] = {}
+_image_cache_locks: dict[str, asyncio.Lock] = {}
+
+
+def get_image_cache_key(image: Image.Image) -> str:
+    """Compute a stable SHA-256 cache key from the JPEG-encoded bytes of a PIL image."""
+    buf = io.BytesIO()
+    image.save(buf, format="JPEG")
+    return hashlib.sha256(buf.getvalue()).hexdigest()
+
+
+def resize_image_for_gemma(image: Image.Image) -> Image.Image:
+    """Downscale only oversized images while preserving their aspect ratio."""
+    if max(image.size) <= MAX_IMAGE_SIZE:
+        return image
+
+    resized = image.copy()
+    resized.thumbnail((MAX_IMAGE_SIZE, MAX_IMAGE_SIZE), Image.Resampling.LANCZOS)
+    return resized
 
 
 class GemmaModel:
@@ -56,68 +88,104 @@ Use empty arrays when no items are clearly visible. Do not use Markdown or code 
     def __init__(self):
         self.model_name = "gemma3:4b"
         self.ollama_url = "http://localhost:11434/api/chat"
+        self._http_client: httpx.AsyncClient | None = None
 
-    async def analyze_image(self, image, prompt: str, task: str) -> dict:
-        image_buffer = io.BytesIO()
-        image.save(image_buffer, format="JPEG")
-        image_bytes = image_buffer.getvalue()
-        image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+    def _get_http_client(self) -> httpx.AsyncClient:
+        if self._http_client is None:
+            self._http_client = httpx.AsyncClient(timeout=GEMMA_REQUEST_TIMEOUT_SECONDS)
+        return self._http_client
 
-        payload = {
-            "model": self.model_name,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": self.system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": f"Requested task: {task}\nUser prompt: {prompt}",
-                    "images": [
-                        image_base64
-                    ]
-                }
-            ],
-            "stream": False
-        }
+    async def close(self) -> None:
+        if self._http_client is not None:
+            await self._http_client.aclose()
+            self._http_client = None
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            response = await client.post(
+    async def analyze_image(self, image: Image.Image, prompt: str, task: str) -> dict:
+        image = resize_image_for_gemma(image)
+
+        # ------------------------------------------------------------------
+        # Cache lookup — skip Ollama entirely if we've seen this image before
+        # ------------------------------------------------------------------
+        cache_key = get_image_cache_key(image)
+        cached_result = IMAGE_ANALYSIS_CACHE.get(cache_key)
+        if cached_result is not None:
+            print(f"[Gemma Cache] HIT: {cache_key}")
+            return cached_result
+
+        cache_lock = _image_cache_locks.setdefault(cache_key, asyncio.Lock())
+        async with cache_lock:
+            cached_result = IMAGE_ANALYSIS_CACHE.get(cache_key)
+            if cached_result is not None:
+                print(f"[Gemma Cache] HIT: {cache_key}")
+                return cached_result
+
+        # ------------------------------------------------------------------
+        # Cache miss — encode and send to Ollama
+        # ------------------------------------------------------------------
+            print(f"[Gemma Cache] MISS: {cache_key}")
+            image_buffer = io.BytesIO()
+            image.save(image_buffer, format="JPEG")
+            image_bytes = image_buffer.getvalue()
+            image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+
+            payload = {
+                "model": self.model_name,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": self.system_prompt
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Requested task: {task}\nUser prompt: {prompt}",
+                        "images": [
+                            image_base64
+                        ]
+                    }
+                ],
+                "stream": False
+            }
+
+            response = await self._get_http_client().post(
                 self.ollama_url,
                 json=payload
             )
 
-        response.raise_for_status()
-        result = response.json()
+            response.raise_for_status()
+            result = response.json()
 
-        content = result["message"]["content"].strip()
+            content = result["message"]["content"].strip()
 
-        if content.startswith("```"):
-            content = content.removeprefix("```").removeprefix("json").removesuffix("```").strip()
+            if content.startswith("```"):
+                content = content.removeprefix("```").removeprefix("json").removesuffix("```").strip()
 
-        try:
-            structured_result = json.loads(content)
-        except json.JSONDecodeError as error:
-            raise RuntimeError("Ollama returned invalid structured JSON.") from error
+            try:
+                structured_result = json.loads(content)
+            except json.JSONDecodeError as error:
+                raise RuntimeError("Ollama returned invalid structured JSON.") from error
 
-        if not isinstance(structured_result, dict):
-            raise RuntimeError("Ollama returned structured data in an invalid format.")
+            if not isinstance(structured_result, dict):
+                raise RuntimeError("Ollama returned structured data in an invalid format.")
 
-        description = structured_result.get("description", "")
-        if not isinstance(description, str):
-            description = str(description)
+            description = structured_result.get("description", "")
+            if not isinstance(description, str):
+                description = str(description)
 
-        def string_list(field_name: str) -> list[str]:
-            values = structured_result.get(field_name, [])
-            if not isinstance(values, list):
-                return []
-            return [str(value) for value in values]
+            def string_list(field_name: str) -> list[str]:
+                values = structured_result.get(field_name, [])
+                if not isinstance(values, list):
+                    return []
+                return [str(value) for value in values]
 
-        task_result = {
-            "description": description,
-            "objects": string_list("objects"),
-            "visible_text": string_list("visible_text"),
-            "important_details": string_list("important_details")
-        }
+            task_result = {
+                "description": description,
+                "objects": string_list("objects"),
+                "visible_text": string_list("visible_text"),
+                "important_details": string_list("important_details")
+            }
 
-        return task_result
+        # ------------------------------------------------------------------
+        # Populate cache before returning
+        # ------------------------------------------------------------------
+            IMAGE_ANALYSIS_CACHE[cache_key] = task_result
+            return task_result

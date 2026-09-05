@@ -368,6 +368,10 @@ def resolve_form_output_types(output_type: str | None = None, output_types: str 
     """Parse output_types form input (comma separated or JSON list) or fallback to output_type."""
     if output_types and output_types.strip():
         raw = output_types.strip()
+        # Swagger UI can submit its generic string placeholder alongside the
+        # explicit legacy output_type field. Treat that placeholder as empty.
+        if raw.lower() == "string" and output_type and output_type.strip():
+            return [output_type.strip()]
         if raw.startswith("[") and raw.endswith("]"):
             try:
                 parsed = json.loads(raw)

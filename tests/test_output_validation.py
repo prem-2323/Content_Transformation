@@ -6,10 +6,12 @@ from validation import (
     validate_and_format_video_script,
     validate_output_types,
 )
+from text.routes import resolve_form_output_types
 
 
 def test_video_alias_is_normalized_to_video_script():
     assert validate_output_types(["video"]) == ["video_script"]
+
 
 
 def test_unknown_output_type_is_rejected():
@@ -19,6 +21,10 @@ def test_unknown_output_type_is_rejected():
     except HTTPException as exc:
         assert exc.status_code == 400
         assert "Unsupported output type" in str(exc.detail)
+
+
+def test_swagger_string_placeholder_uses_explicit_output_type():
+    assert resolve_form_output_types("summary", "string") == ["summary"]
 
 
 def test_think_blocks_are_removed_from_model_output():

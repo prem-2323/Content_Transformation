@@ -3,7 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from text.routes import router as text_router
 from visual.routes import router as visual_router
+from visual.routes import gemma as visual_gemma
 from multimodal.routes import router as multimodal_router
+from multimodal.service import gemma_model as multimodal_gemma
 from image.routes import router as image_router
 from video.routes import router as video_router
 
@@ -40,6 +42,15 @@ app.include_router(visual_router)
 app.include_router(multimodal_router)
 app.include_router(image_router)
 app.include_router(video_router)
+
+
+async def close_gemma_clients():
+    await visual_gemma.close()
+    if multimodal_gemma is not visual_gemma:
+        await multimodal_gemma.close()
+
+
+app.on_event("shutdown")(close_gemma_clients)
 
 
 MODEL_NAMES = ("qwen3:4b", "gemma3:4b", "stable-diffusion", "edge-tts")
