@@ -1,5 +1,6 @@
+import json
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from typing import Optional
+from typing import Optional, List
 
 from .qwen_service import QwenServiceError, generate_with_qwen
 from .document_extractor import extract_txt, extract_pdf, extract_docx
@@ -42,19 +43,99 @@ Keep each slide concise.
 Create a video script.
 Include a hook, main content, transitions, and a conclusion.
 Make it natural for spoken narration.
+""",
+
+    "infographic": """
+Create structured content for an Infographic.
+Return ONLY valid JSON (no markdown formatting, no code fences) with exactly these keys:
+{
+  "title": "Concise headline title for the infographic",
+  "main_message": "Core takeaway message",
+  "key_statistics": ["Stat or key metric 1", "Stat or key metric 2"],
+  "sections": [
+    {"heading": "Section 1 Title", "content": "Section 1 content or bullet points"},
+    {"heading": "Section 2 Title", "content": "Section 2 content or bullet points"}
+  ],
+  "supporting_text": "Brief contextual summary or supporting narrative",
+  "visual_hierarchy": "Guidance on primary vs secondary visual focus areas",
+  "icon_recommendations": ["icon_name_1", "icon_name_2"],
+  "color_recommendations": ["Primary Color", "Accent Color", "Background Color"],
+  "layout_recommendation": "Recommended visual structure layout (e.g. Vertical Timeline, 3-Column Grid, Comparison)"
+}
 """
 }
 
 
+def parse_output_content(generated_text: str, output_type: str):
+    """Parse generated text into structured dict if infographic or valid JSON, else return raw string."""
+    if output_type.lower() != "infographic":
+        return generated_text
+
+    cleaned = generated_text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.removeprefix("```").removeprefix("json").removesuffix("```").strip()
+
+    try:
+        data = json.loads(cleaned)
+        if isinstance(data, dict):
+            required_keys = [
+                "title", "main_message", "key_statistics", "sections",
+                "supporting_text", "visual_hierarchy", "icon_recommendations",
+                "color_recommendations", "layout_recommendation"
+            ]
+            for key in required_keys:
+                if key not in data:
+                    if key in ["key_statistics", "sections", "icon_recommendations", "color_recommendations"]:
+                        data[key] = []
+                    else:
+                        data[key] = ""
+            return data
+    except Exception:
+        pass
+
+    return {
+        "title": "Infographic Summary",
+        "main_message": generated_text[:150] if len(generated_text) > 150 else generated_text,
+        "key_statistics": [],
+        "sections": [{"heading": "Key Highlights", "content": generated_text}],
+        "supporting_text": generated_text,
+        "visual_hierarchy": "Primary focus on Title and Main Message, followed by Key Highlights.",
+        "icon_recommendations": ["chart", "lightbulb"],
+        "color_recommendations": ["Primary", "Accent", "Background"],
+        "layout_recommendation": "Single-column vertical stack layout with highlighted stats."
+    }
+
+
+def resolve_form_output_types(output_type: Optional[str] = None, output_types: Optional[str] = None) -> List[str]:
+    """Parse output_types form input (comma separated or JSON list) or fallback to output_type."""
+    if output_types:
+        raw = output_types.strip()
+        if raw.startswith("[") and raw.endswith("]"):
+            try:
+                parsed = json.loads(raw)
+                if isinstance(parsed, list):
+                    return [str(item).strip() for item in parsed if item]
+            except Exception:
+                pass
+        return [item.strip() for item in raw.split(",") if item.strip()]
+    if output_type:
+        return [output_type.strip()]
+    return ["summary"]
+
+
 @router.post("/transform", response_model=TextResponse)
 def transform(request: TextRequest):
-    """Transform direct text input into selected output format using Qwen3 4B."""
-    output_instruction = OUTPUT_INSTRUCTIONS.get(
-        request.output_type.lower(),
-        OUTPUT_INSTRUCTIONS["summary"]
-    )
+    """Transform direct text input into selected output formats using Qwen3 4B."""
+    target_types = request.output_types or [request.output_type or "summary"]
+    outputs_dict = {}
 
-    prompt = f"""
+    for ot in target_types:
+        output_instruction = OUTPUT_INSTRUCTIONS.get(
+            ot.lower(),
+            OUTPUT_INSTRUCTIONS["summary"]
+        )
+
+        prompt = f"""
 You are a professional content transformation AI.
 
 Transform the source content according to the user's requirements.
@@ -63,7 +144,7 @@ SOURCE CONTENT:
 {request.text}
 
 OUTPUT TYPE:
-{request.output_type}
+{ot}
 
 AUDIENCE:
 {request.audience}
@@ -91,33 +172,39 @@ Important:
 - Return only the transformed content.
 """
 
-    try:
-        generated_text = generate_with_qwen(prompt)
-    except QwenServiceError as error:
-        raise HTTPException(status_code=504, detail=str(error)) from error
+        try:
+            generated_text = generate_with_qwen(prompt)
+            outputs_dict[ot] = parse_output_content(generated_text, ot)
+        except QwenServiceError as error:
+            raise HTTPException(status_code=504, detail=str(error)) from error
+
+    first_type = target_types[0]
 
     return TextResponse(
-        output_type=request.output_type,
+        output_type=first_type,
+        output_types=target_types,
         audience=request.audience,
         tone=request.tone,
         language=request.language,
         detail_level=request.detail_level,
         objective=request.objective,
-        generated_content=generated_text
+        outputs=outputs_dict,
+        generated_content=outputs_dict[first_type]
     )
 
 
 @router.post("/transform-file", response_model=FileTextResponse)
 async def transform_file(
     file: UploadFile = File(...),
-    output_type: str = Form("summary"),
+    output_type: Optional[str] = Form(None),
+    output_types: Optional[str] = Form(None, description="Comma-separated or JSON list of output types, e.g. summary,linkedin"),
     audience: str = Form("General public"),
     tone: str = Form("Professional"),
     language: str = Form("English"),
     detail_level: str = Form("Medium"),
     objective: str = Form("Inform")
 ):
-    """Extract document content (TXT, PDF, DOCX) and transform into selected output format."""
+    """Extract document content (TXT, PDF, DOCX) and transform into selected output format(s)."""
     if not file.filename:
         raise HTTPException(
             status_code=400,
@@ -146,12 +233,16 @@ async def transform_file(
                 detail="The uploaded file contains no extractable text."
             )
 
-        output_instruction = OUTPUT_INSTRUCTIONS.get(
-            output_type.lower(),
-            OUTPUT_INSTRUCTIONS["summary"]
-        )
+        target_types = resolve_form_output_types(output_type, output_types)
+        outputs_dict = {}
 
-        prompt = f"""
+        for ot in target_types:
+            output_instruction = OUTPUT_INSTRUCTIONS.get(
+                ot.lower(),
+                OUTPUT_INSTRUCTIONS["summary"]
+            )
+
+            prompt = f"""
 You are a professional content transformation AI.
 
 Transform the extracted document content according to the user's requirements.
@@ -160,7 +251,7 @@ SOURCE CONTENT:
 {extracted_text}
 
 OUTPUT TYPE:
-{output_type}
+{ot}
 
 AUDIENCE:
 {audience}
@@ -188,18 +279,23 @@ Important:
 - Return only the transformed content.
 """
 
-        generated_text = generate_with_qwen(prompt)
+            generated_text = generate_with_qwen(prompt)
+            outputs_dict[ot] = parse_output_content(generated_text, ot)
+
+        first_type = target_types[0]
 
         return FileTextResponse(
             filename=file.filename,
-            output_type=output_type,
+            output_type=first_type,
+            output_types=target_types,
             audience=audience,
             tone=tone,
             language=language,
             detail_level=detail_level,
             objective=objective,
             extracted_text=extracted_text,
-            generated_content=generated_text
+            outputs=outputs_dict,
+            generated_content=outputs_dict[first_type]
         )
 
     except UnicodeDecodeError:
@@ -214,3 +310,4 @@ Important:
             status_code=500,
             detail=f"File processing failed: {str(e)}"
         )
+

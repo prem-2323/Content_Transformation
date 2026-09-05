@@ -18,7 +18,7 @@ def generate_with_qwen(prompt: str) -> str:
         "stream": False,
         "think": False,
         "options": {
-            "num_predict": 200
+            "num_predict": 1500
         }
     }
 

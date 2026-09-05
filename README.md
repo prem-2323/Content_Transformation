@@ -109,11 +109,11 @@ Once running, access interactive API documentation at:
 ### 1. Direct Text Transformation (`POST /transform`)
 Transforms raw text content into selected deliverable.
 
-**Request Body (`JSON`):**
+**Request Body (`JSON` - Single or Multi-Output Selection):**
 ```json
 {
   "text": "Artificial Intelligence is rapidly evolving, impacting healthcare, finance, and software development.",
-  "output_type": "linkedin",
+  "output_types": ["summary", "linkedin", "presentation"],
   "audience": "Tech Professionals",
   "tone": "Professional",
   "language": "English",
@@ -121,16 +121,35 @@ Transforms raw text content into selected deliverable.
   "objective": "Inform"
 }
 ```
-**Supported `output_type` values**: `linkedin`, `twitter`, `summary`, `advisory`, `presentation`, `video_script`.
+*Note: Both single `output_type` ("linkedin") and multi `output_types` (["summary", "linkedin"]) are supported for backward compatibility.*
+
+**Supported output types**: `linkedin`, `twitter`, `summary`, `advisory`, `presentation`, `video_script`, `infographic`.
+
+**Sample Multi-Output Response (`JSON`):**
+```json
+{
+  "output_types": ["summary", "linkedin", "presentation"],
+  "audience": "Tech Professionals",
+  "tone": "Professional",
+  "language": "English",
+  "detail_level": "Medium",
+  "objective": "Inform",
+  "outputs": {
+    "summary": "AI summary content...",
+    "linkedin": "LinkedIn post content...",
+    "presentation": "Presentation slide bullet points..."
+  }
+}
+```
 
 ---
 
 ### 2. Document File Transformation (`POST /transform-file`)
-Extracts text from `.txt`, `.pdf`, or `.docx` files and transforms it into the requested format.
+Extracts text from `.txt`, `.pdf`, or `.docx` files and transforms it into the requested format(s).
 
 **Form Data:**
 - `file`: Uploaded file (`.txt`, `.pdf`, `.docx`)
-- `output_type`: e.g. `summary`, `presentation`, `linkedin`, `advisory`, `video_script`
+- `output_types`: Comma-separated or JSON list (e.g. `summary,linkedin,presentation`) or legacy `output_type`
 - `audience`, `tone`, `language`, `detail_level`, `objective`
 
 ---

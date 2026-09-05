@@ -4,7 +4,7 @@ from PIL import Image
 
 from text.qwen_service import generate_with_qwen, QwenServiceError
 from visual.gemma_model import GemmaModel
-from text.routes import OUTPUT_INSTRUCTIONS
+from text.routes import OUTPUT_INSTRUCTIONS, parse_output_content
 
 gemma_model = GemmaModel()
 
@@ -12,14 +12,14 @@ gemma_model = GemmaModel()
 async def process_multimodal_content(
     text: str,
     images: List[Image.Image],
-    output_type: str,
+    output_types: List[str],
     audience: str,
     tone: str,
     language: str,
     detail_level: str,
     objective: str
 ) -> Dict[str, Any]:
-    """Process text with Qwen3 4B, embedded images with Gemma 3 4B, and combine into final transformed deliverable."""
+    """Process text with Qwen3 4B, embedded images with Gemma 3 4B, and combine into final transformed deliverables."""
     
     # 1. Image Analysis via Gemma 3 4B for each extracted image
     gemma_results = []
@@ -68,12 +68,14 @@ Key Details: {', '.join(res.get('important_details', []))}
     else:
         image_context_str = "No embedded images detected in document."
 
-    output_instruction = OUTPUT_INSTRUCTIONS.get(
-        output_type.lower(),
-        OUTPUT_INSTRUCTIONS["summary"]
-    )
+    outputs_dict = {}
+    for ot in output_types:
+        output_instruction = OUTPUT_INSTRUCTIONS.get(
+            ot.lower(),
+            OUTPUT_INSTRUCTIONS["summary"]
+        )
 
-    synthesis_prompt = f"""
+        synthesis_prompt = f"""
 You are an advanced multimodal content transformation AI.
 
 Synthesize both textual document analysis and visual image analysis to generate a unified, seamless output.
@@ -85,7 +87,7 @@ Synthesize both textual document analysis and visual image analysis to generate 
 {image_context_str}
 
 === USER CONSTRAINTS ===
-OUTPUT TYPE: {output_type}
+OUTPUT TYPE: {ot}
 AUDIENCE: {audience}
 TONE: {tone}
 LANGUAGE: {language}
@@ -101,10 +103,14 @@ Important:
 - Produce a clean, comprehensive, professional result. Return ONLY the transformed content.
 """
 
-    final_combined_output = generate_with_qwen(synthesis_prompt)
+        raw_output = generate_with_qwen(synthesis_prompt)
+        outputs_dict[ot] = parse_output_content(raw_output, ot)
+
+    first_type = output_types[0] if output_types else "summary"
 
     return {
         "text_analysis_qwen": qwen_text_summary,
         "image_analysis_gemma": gemma_results,
-        "final_combined_output": final_combined_output
+        "outputs": outputs_dict,
+        "final_combined_output": outputs_dict.get(first_type)
     }
