@@ -6,6 +6,15 @@ from .qwen_service import QwenServiceError, generate_with_qwen
 from .document_extractor import extract_txt, extract_pdf, extract_docx
 from .schemas import TextRequest, TextResponse, FileTextResponse
 from .pptx_generator import create_pptx_presentation
+from validation import (
+    validate_output_types,
+    validate_source_text,
+    validate_and_clean_model_response,
+    validate_and_format_twitter,
+    validate_and_format_infographic,
+    validate_and_format_video_script,
+    validate_and_format_presentation
+)
 
 router = APIRouter(tags=["Text Transformation"])
 
@@ -120,120 +129,40 @@ Return ONLY valid JSON (no markdown formatting, no code fences) with exactly the
 
 
 def parse_output_content(generated_text: str, output_type: str):
-    """Parse generated text into structured dict if infographic, video_script, presentation, or valid JSON, else return raw string."""
+    """Clean reasoning leakage, validate model response, and parse structured output if required."""
+    cleaned_text = validate_and_clean_model_response(generated_text)
     ot_lower = output_type.lower()
-    if ot_lower not in ["infographic", "video_script", "presentation"]:
-        return generated_text
 
-    cleaned = generated_text.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.removeprefix("```").removeprefix("json").removesuffix("```").strip()
+    if ot_lower == "twitter":
+        return validate_and_format_twitter(cleaned_text)
+
+    if ot_lower not in ["infographic", "video_script", "presentation"]:
+        return cleaned_text
+
+    raw_json = cleaned_text
+    if raw_json.startswith("```"):
+        raw_json = raw_json.removeprefix("```").removeprefix("json").removesuffix("```").strip()
 
     try:
-        data = json.loads(cleaned)
+        data = json.loads(raw_json)
         if isinstance(data, dict):
             if ot_lower == "infographic":
-                required_keys = [
-                    "title", "main_message", "key_statistics", "sections",
-                    "supporting_text", "visual_hierarchy", "icon_recommendations",
-                    "color_recommendations", "layout_recommendation"
-                ]
-                for key in required_keys:
-                    if key not in data:
-                        if key in ["key_statistics", "sections", "icon_recommendations", "color_recommendations"]:
-                            data[key] = []
-                        else:
-                            data[key] = ""
-                return data
+                return validate_and_format_infographic(data)
             elif ot_lower == "video_script":
-                required_keys = [
-                    "video_title", "duration", "storyboard",
-                    "music_recommendation", "voice_over_direction", "thumbnail_recommendation"
-                ]
-                for key in required_keys:
-                    if key not in data:
-                        if key == "storyboard":
-                            data[key] = []
-                        else:
-                            data[key] = ""
-                if isinstance(data.get("storyboard"), list):
-                    sb_keys = ["scene", "duration", "visuals", "narration", "on_screen_text", "subtitle", "transition"]
-                    for idx, scene in enumerate(data["storyboard"], 1):
-                        if isinstance(scene, dict):
-                            for sb_k in sb_keys:
-                                if sb_k not in scene:
-                                    scene[sb_k] = idx if sb_k == "scene" else ""
-                return data
+                return validate_and_format_video_script(data)
             elif ot_lower == "presentation":
-                if "presentation_title" not in data and "title" in data:
-                    data["presentation_title"] = data["title"]
-                if "slides" not in data or not isinstance(data["slides"], list):
-                    data["slides"] = []
-                for idx, s in enumerate(data["slides"], 1):
-                    if isinstance(s, dict):
-                        s.setdefault("slide_number", idx)
-                        s.setdefault("title", f"Slide {idx}")
-                        s.setdefault("layout", "bullet_points")
-                        s.setdefault("content", [])
-                        s.setdefault("speaker_notes", "")
-                        s.setdefault("visual_recommendation", "")
-                return data
+                return validate_and_format_presentation(data)
     except Exception:
         pass
 
     if ot_lower == "infographic":
-        return {
-            "title": "Infographic Summary",
-            "main_message": generated_text[:150] if len(generated_text) > 150 else generated_text,
-            "key_statistics": [],
-            "sections": [{"heading": "Key Highlights", "content": generated_text}],
-            "supporting_text": generated_text,
-            "visual_hierarchy": "Primary focus on Title and Main Message, followed by Key Highlights.",
-            "icon_recommendations": ["chart", "lightbulb"],
-            "color_recommendations": ["Primary", "Accent", "Background"],
-            "layout_recommendation": "Single-column vertical stack layout with highlighted stats."
-        }
+        return validate_and_format_infographic({"main_message": cleaned_text[:150], "supporting_text": cleaned_text})
     elif ot_lower == "video_script":
-        return {
-            "video_title": "Video Overview",
-            "duration": "60 seconds",
-            "storyboard": [
-                {
-                    "scene": 1,
-                    "duration": "0-60 sec",
-                    "visuals": "Presenter or dynamic graphics illustrating the content.",
-                    "narration": generated_text,
-                    "on_screen_text": "Key Highlights",
-                    "subtitle": generated_text,
-                    "transition": "Fade Out"
-                }
-            ],
-            "music_recommendation": "Uplifting ambient background music",
-            "voice_over_direction": "Professional, engaging, and clear delivery",
-            "thumbnail_recommendation": "High contrast headline text with modern tech graphic"
-        }
+        return validate_and_format_video_script({"video_title": "Video Overview", "storyboard": [{"scene": 1, "duration": "0-60 sec", "visuals": "Overview", "narration": cleaned_text, "on_screen_text": "Overview", "subtitle": cleaned_text, "transition": "Fade Out"}]})
     elif ot_lower == "presentation":
-        return {
-            "presentation_title": "Executive Presentation",
-            "subtitle": "Overview and Summary",
-            "slides": [
-                {
-                    "slide_number": 1,
-                    "title": "Executive Presentation",
-                    "layout": "title",
-                    "subtitle": "Overview and Summary",
-                    "speaker_notes": "Welcome to the presentation."
-                },
-                {
-                    "slide_number": 2,
-                    "title": "Key Highlights",
-                    "layout": "bullet_points",
-                    "content": [line.strip() for line in generated_text.split("\n") if line.strip()][:5],
-                    "speaker_notes": generated_text,
-                    "visual_recommendation": "Bullet list with modern icon callouts"
-                }
-            ]
-        }
+        return validate_and_format_presentation({"presentation_title": "Executive Presentation", "slides": [{"slide_number": 1, "title": "Overview", "layout": "bullet_points", "content": [cleaned_text]}]})
+
+    return cleaned_text
 
 
 def resolve_form_output_types(output_type: Optional[str] = None, output_types: Optional[str] = None) -> List[str]:
@@ -256,7 +185,9 @@ def resolve_form_output_types(output_type: Optional[str] = None, output_types: O
 @router.post("/transform", response_model=TextResponse)
 def transform(request: TextRequest):
     """Transform direct text input into selected output formats using Qwen3 4B."""
-    target_types = request.output_types or [request.output_type or "summary"]
+    valid_text = validate_source_text(request.text)
+    raw_requested = request.output_types or [request.output_type or "summary"]
+    target_types = validate_output_types(raw_requested)
     outputs_dict = {}
 
     for ot in target_types:
@@ -271,7 +202,7 @@ You are a professional content transformation AI.
 Transform the source content according to the user's requirements.
 
 SOURCE CONTENT:
-{request.text}
+{valid_text}
 
 OUTPUT TYPE:
 {ot}
@@ -349,6 +280,10 @@ async def transform_file(
             detail="Only TXT, PDF and DOCX files are supported."
         )
 
+    # Validate output types first before reading file
+    raw_requested = resolve_form_output_types(output_type, output_types)
+    target_types = validate_output_types(raw_requested)
+
     try:
         if filename.endswith(".txt"):
             extracted_text = extract_txt(file)
@@ -357,13 +292,7 @@ async def transform_file(
         elif filename.endswith(".docx"):
             extracted_text = extract_docx(file)
 
-        if not extracted_text.strip():
-            raise HTTPException(
-                status_code=400,
-                detail="The uploaded file contains no extractable text."
-            )
-
-        target_types = resolve_form_output_types(output_type, output_types)
+        valid_text = validate_source_text(extracted_text)
         outputs_dict = {}
 
         for ot in target_types:
@@ -378,7 +307,7 @@ You are a professional content transformation AI.
 Transform the extracted document content according to the user's requirements.
 
 SOURCE CONTENT:
-{extracted_text}
+{valid_text}
 
 OUTPUT TYPE:
 {ot}
@@ -423,7 +352,7 @@ Important:
             language=language,
             detail_level=detail_level,
             objective=objective,
-            extracted_text=extracted_text,
+            extracted_text=valid_text,
             outputs=outputs_dict,
             generated_content=outputs_dict[first_type]
         )
@@ -445,6 +374,9 @@ Important:
 @router.post("/export-pptx")
 def export_pptx(request: TextRequest):
     """Generate structured slides using Qwen3 4B and return a downloadable Microsoft PowerPoint (.pptx) file."""
+    valid_text = validate_source_text(request.text)
+    validate_output_types(["presentation"])
+
     output_instruction = OUTPUT_INSTRUCTIONS["presentation"]
     prompt = f"""
 You are a professional presentation designer AI.
@@ -452,7 +384,7 @@ You are a professional presentation designer AI.
 Transform the source content into a structured PowerPoint presentation.
 
 SOURCE CONTENT:
-{request.text}
+{valid_text}
 
 AUDIENCE: {request.audience}
 TONE: {request.tone}
@@ -493,6 +425,7 @@ async def export_pptx_file(
     objective: str = Form("Inform")
 ):
     """Extract document content (TXT, PDF, DOCX), generate structured slides, and return downloadable PowerPoint (.pptx) file."""
+    validate_output_types(["presentation"])
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is missing.")
 
@@ -508,8 +441,7 @@ async def export_pptx_file(
         elif filename_lower.endswith(".docx"):
             extracted_text = extract_docx(file)
 
-        if not extracted_text.strip():
-            raise HTTPException(status_code=400, detail="The uploaded file contains no extractable text.")
+        valid_text = validate_source_text(extracted_text)
 
         output_instruction = OUTPUT_INSTRUCTIONS["presentation"]
         prompt = f"""
@@ -518,7 +450,7 @@ You are a professional presentation designer AI.
 Transform the extracted document content into a structured PowerPoint presentation.
 
 SOURCE CONTENT:
-{extracted_text}
+{valid_text}
 
 AUDIENCE: {audience}
 TONE: {tone}
@@ -546,5 +478,6 @@ Important:
         raise
     except Exception as err:
         raise HTTPException(status_code=500, detail=f"PPTX file generation failed: {str(err)}")
+
 
 

@@ -7,6 +7,7 @@ from .service import process_multimodal_content
 from text.qwen_service import QwenServiceError
 
 from text.routes import resolve_form_output_types
+from validation import validate_output_types
 
 router = APIRouter(
     prefix="/multimodal",
@@ -26,6 +27,9 @@ async def transform_multimodal_pdf(
     objective: str = Form("Inform")
 ):
     """Extract both text and embedded images from a PDF, run Qwen3 + Gemma3, and produce unified content output(s)."""
+    raw_types = resolve_form_output_types(output_type, output_types)
+    target_types = validate_output_types(raw_types)
+
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is missing.")
 
@@ -37,8 +41,6 @@ async def transform_multimodal_pdf(
 
         if not text.strip() and not images:
             raise HTTPException(status_code=400, detail="Uploaded PDF contains neither readable text nor embedded images.")
-
-        target_types = resolve_form_output_types(output_type, output_types)
 
         results = await process_multimodal_content(
             text=text,
