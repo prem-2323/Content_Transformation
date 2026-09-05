@@ -371,77 +371,163 @@ RETURN ONLY VALID JSON matching this structure:
 
 
 class VideoGenerator:
-    """Generates grounded video storyboard and scene narration from UCKR."""
+    """Generates grounded video storyboard with Intelligent Video Planning from UCKR."""
 
     @staticmethod
     def generate(uckr: UCKR, config: OutputGenerationConfig) -> GroundedVideo:
+        target_duration = float(config.video_duration or 30)
+        # Optimal scene count: ~5 seconds per scene
+        num_scenes = max(3, min(12, round(target_duration / 5.0)))
+        avg_dur = round(target_duration / num_scenes, 2)
+
         prompt = VIDEO_PROMPT.format(
             facts_catalog=_format_facts_block(uckr),
             core_topic=uckr.core_topic,
-            duration=config.video_duration
+            duration=int(target_duration)
         )
+
+        valid_ids = {f.id for f in uckr.facts}
 
         try:
             raw = generate_with_qwen(prompt)
             data = json.loads(_clean_json(raw))
-            if isinstance(data, dict) and "storyboard" in data and len(data["storyboard"]) > 0:
-                valid_ids = {f.id for f in uckr.facts}
+            if isinstance(data, dict) and "storyboard" in data and len(data["storyboard"]) >= 2:
+                raw_scenes = data["storyboard"][:num_scenes]
                 scenes: List[SceneItem] = []
                 all_facts_set = set()
+                curr_t = 0.0
 
-                for sc in data["storyboard"]:
+                for i, sc in enumerate(raw_scenes, start=1):
                     sc_facts = [fid for fid in sc.get("source_facts", []) if fid in valid_ids]
                     all_facts_set.update(sc_facts)
+                    dur = round(float(sc.get("duration_seconds", avg_dur)), 2)
+                    start_t = round(curr_t, 2)
+                    end_t = round(curr_t + dur, 2)
+                    curr_t = end_t
+
+                    imp = float(sc.get("visual_importance", 0.85 if i == 2 else 0.8))
+                    tier = "HIGH" if imp >= 0.85 else "MEDIUM"
+                    from video.planner import seconds_to_srt_timestamp
+
                     scenes.append(SceneItem(
-                        scene_number=sc.get("scene_number", len(scenes) + 1),
-                        duration_seconds=sc.get("duration_seconds", 5),
+                        scene_number=i,
+                        duration_seconds=int(round(dur)),
+                        visual_importance=imp,
+                        visual_tier=tier,
                         visual_prompt=sc.get("visual_prompt", f"cinematic shot of {uckr.core_topic}"),
                         narration=sc.get("narration", ""),
                         on_screen_text=sc.get("on_screen_text", ""),
+                        start_time=start_t,
+                        end_time=end_t,
+                        transition_type="crossfade" if i < len(raw_scenes) else "fade",
+                        transition_duration=0.5 if i < len(raw_scenes) else 0.0,
+                        subtitle_start=seconds_to_srt_timestamp(start_t),
+                        subtitle_end=seconds_to_srt_timestamp(end_t),
                         source_facts=sc_facts
                     ))
 
+                timeline = [
+                    {
+                        "scene_number": s.scene_number,
+                        "start_time": s.start_time,
+                        "end_time": s.end_time,
+                        "duration": s.duration_seconds,
+                        "visual_tier": s.visual_tier,
+                        "narration": s.narration
+                    }
+                    for s in scenes
+                ]
+
                 return GroundedVideo(
                     video_title=data.get("video_title", uckr.core_topic),
-                    total_duration_seconds=data.get("total_duration_seconds", config.video_duration),
+                    total_duration_seconds=int(round(sum(s.duration_seconds for s in scenes))),
                     storyboard=scenes,
-                    source_facts=list(all_facts_set) or [f.id for f in uckr.facts[:4]]
+                    source_facts=list(all_facts_set) or [f.id for f in uckr.facts[:4]],
+                    timeline=timeline,
+                    ffmpeg_sync_metadata={
+                        "target_duration": target_duration,
+                        "scene_count": len(scenes),
+                        "sync_status": "synchronized"
+                    }
                 )
         except Exception as e:
             logger.warning(f"VideoGenerator LLM fallback: {e}")
 
-        # Deterministic Grounded Fallback
+        # Deterministic Grounded Intelligent Fallback
         scenes = []
-        top_facts = sorted(uckr.facts, key=lambda x: x.importance, reverse=True)[:5]
+        top_facts = sorted(uckr.facts, key=lambda x: x.importance, reverse=True)
+        from video.planner import seconds_to_srt_timestamp
+
+        dur_per_scene = target_duration / num_scenes
+        current_time = 0.0
 
         # Scene 1: Intro Hook
+        start_t = round(current_time, 2)
+        end_t = round(current_time + dur_per_scene, 2)
+        current_time = end_t
         scenes.append(SceneItem(
             scene_number=1,
-            duration_seconds=5,
-            visual_prompt=f"cinematic photorealistic opening shot representing {uckr.core_topic}, 8k, volumetric lighting",
-            narration=f"Welcome to the forefront of {uckr.core_topic}. Here is what you need to know.",
+            duration_seconds=int(round(dur_per_scene)),
+            visual_importance=0.85,
+            visual_tier="HIGH",
+            visual_prompt=f"cinematic photorealistic opening establishing shot representing {uckr.core_topic}, 8k, volumetric lighting",
+            narration=f"Welcome to {uckr.core_topic}. Here is what the latest findings demonstrate.",
             on_screen_text=f"{uckr.core_topic}",
+            start_time=start_t,
+            end_time=end_t,
+            transition_type="crossfade",
+            transition_duration=0.5,
+            subtitle_start=seconds_to_srt_timestamp(start_t),
+            subtitle_end=seconds_to_srt_timestamp(end_t),
             source_facts=[top_facts[0].id] if top_facts else []
         ))
 
-        # Scenes 2..N: Grounded Facts
-        for idx, fact in enumerate(top_facts[:4], 2):
+        # Scenes 2..N-1: Grounded Facts
+        for idx in range(2, num_scenes):
+            fact_idx = (idx - 2) % len(top_facts) if top_facts else None
+            fact = top_facts[fact_idx] if fact_idx is not None else None
+            stmt = fact.statement if fact else f"Critical key insight for {uckr.core_topic}."
+            f_id = [fact.id] if fact else []
+            imp = fact.importance if fact else 0.8
+
+            start_t = round(current_time, 2)
+            end_t = round(current_time + dur_per_scene, 2)
+            current_time = end_t
+
             scenes.append(SceneItem(
                 scene_number=idx,
-                duration_seconds=6,
-                visual_prompt=f"cinematic dynamic visual illustrating {fact.statement[:60]}, 8k resolution, crisp detail",
-                narration=fact.statement,
-                on_screen_text=fact.category or "Key Discovery",
-                source_facts=[fact.id]
+                duration_seconds=int(round(dur_per_scene)),
+                visual_importance=imp,
+                visual_tier="HIGH" if imp >= 0.85 else "MEDIUM",
+                visual_prompt=f"cinematic dynamic visual illustrating {stmt[:60]}, 8k resolution, crisp detail",
+                narration=stmt,
+                on_screen_text=fact.category if fact and fact.category else f"Finding {idx}",
+                start_time=start_t,
+                end_time=end_t,
+                transition_type="crossfade",
+                transition_duration=0.5,
+                subtitle_start=seconds_to_srt_timestamp(start_t),
+                subtitle_end=seconds_to_srt_timestamp(end_t),
+                source_facts=f_id
             ))
 
         # Final Scene: Outro
+        start_t = round(current_time, 2)
+        end_t = round(current_time + dur_per_scene, 2)
         scenes.append(SceneItem(
-            scene_number=len(scenes) + 1,
-            duration_seconds=5,
+            scene_number=num_scenes,
+            duration_seconds=int(round(dur_per_scene)),
+            visual_importance=0.75,
+            visual_tier="MEDIUM",
             visual_prompt=f"futuristic glowing technology horizon, ultra high resolution, cinematic ending frame",
-            narration=f"Stay informed as {uckr.core_topic} continues to transform the future.",
+            narration=f"Stay informed as {uckr.core_topic} continues to transform modern practices.",
             on_screen_text="The Future Unfolding",
+            start_time=start_t,
+            end_time=end_t,
+            transition_type="fade",
+            transition_duration=0.0,
+            subtitle_start=seconds_to_srt_timestamp(start_t),
+            subtitle_end=seconds_to_srt_timestamp(end_t),
             source_facts=[top_facts[-1].id] if top_facts else []
         ))
 
@@ -449,11 +535,29 @@ class VideoGenerator:
         for sc in scenes:
             all_used.extend(sc.source_facts)
 
+        timeline = [
+            {
+                "scene_number": s.scene_number,
+                "start_time": s.start_time,
+                "end_time": s.end_time,
+                "duration": s.duration_seconds,
+                "visual_tier": s.visual_tier,
+                "narration": s.narration
+            }
+            for s in scenes
+        ]
+
         return GroundedVideo(
             video_title=f"Explaining {uckr.core_topic}",
-            total_duration_seconds=sum(sc.duration_seconds for sc in scenes),
+            total_duration_seconds=int(round(sum(sc.duration_seconds for sc in scenes))),
             storyboard=scenes,
-            source_facts=list(dict.fromkeys(all_used))
+            source_facts=list(dict.fromkeys(all_used)),
+            timeline=timeline,
+            ffmpeg_sync_metadata={
+                "target_duration": target_duration,
+                "scene_count": len(scenes),
+                "sync_status": "synchronized"
+            }
         )
 
 

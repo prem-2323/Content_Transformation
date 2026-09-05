@@ -171,9 +171,19 @@ class GroundedPresentation(BaseModel):
 class SceneItem(BaseModel):
     scene_number: int
     duration_seconds: int = Field(default=5)
+    visual_importance: float = Field(default=0.8, ge=0.0, le=1.0, description="Visual importance score")
+    visual_tier: str = Field(default="MEDIUM", description="Importance category: HIGH, MEDIUM, LOW")
     visual_prompt: str = Field(..., description="Prompt for visual/image generation")
     narration: str = Field(..., description="Voiceover narration grounded in facts")
+    estimated_narration_duration: float = Field(default=4.5, description="Estimated narration duration in seconds")
+    max_word_count: int = Field(default=15, description="Maximum word count quota")
     on_screen_text: Optional[str] = ""
+    start_time: float = Field(default=0.0, description="Start timestamp in seconds")
+    end_time: float = Field(default=5.0, description="End timestamp in seconds")
+    transition_type: str = Field(default="crossfade", description="Transition type: crossfade, fade, wipe, cut")
+    transition_duration: float = Field(default=0.5, description="Transition duration in seconds")
+    subtitle_start: Optional[str] = Field(default="00:00:00,000", description="SRT formatted start time")
+    subtitle_end: Optional[str] = Field(default="00:00:05,000", description="SRT formatted end time")
     source_facts: List[str] = Field(default_factory=list)
     source_pages: List[int] = Field(default_factory=list)
 
@@ -183,6 +193,8 @@ class GroundedVideo(BaseModel):
     total_duration_seconds: int = Field(default=30)
     storyboard: List[SceneItem] = Field(default_factory=list)
     source_facts: List[str] = Field(default_factory=list)
+    timeline: List[Dict[str, Any]] = Field(default_factory=list)
+    ffmpeg_sync_metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class TweetItem(BaseModel):
