@@ -1,206 +1,144 @@
-# Gen AI Platform for Automated Content Transformation
+# Gen AI Content Transformation Platform
 
-An intelligent, multi-modal AI platform designed to transform raw source content (text, PDF, DOCX documents, images) into tailored communication deliverables including **LinkedIn Posts, X/Twitter Threads, Executive Summaries, Advisories, Presentations, and Video Scripts**, alongside **Visual Understanding (OCR, Object Detection, Scene Description)**.
+A FastAPI platform for transforming text and documents into communication content, analyzing uploaded images, generating images from prompts, generating scene images from content, creating presentations, and producing audio narration.
 
----
+## AI Services
 
-## 👥 Team Roles & Pipeline Split
+- Qwen3 4B through Ollama: text transformation and image prompt engineering.
+- Gemma 3 4B through Ollama: visual analysis.
+- Stable Diffusion 1.5 through WebUI Forge: image generation.
+- edge-tts: MP3 narration.
 
-| Team Member | Role | AI Model | Pipeline Focus |
-|---|---|---|---|
-| **Member 1 (Dhanushiyaa)** | Text Processing & Content Transformation Developer | **Qwen3 4B** + FastAPI | Direct text input, TXT/PDF/DOCX extraction, content transformation (LinkedIn, Twitter/X, Summary, Advisory, Presentation, Video Script). |
-| **Member 2 (Prem)** | Visual Processing & Image Understanding Developer | **Gemma 3 4B** + FastAPI | Image upload, preprocessing, visual understanding, object/scene identification, OCR text extraction, visual summaries. |
+## Architecture
 
----
-
-## 🏗 System Architecture
-
-```
-                                ┌───────────────────────────────────────────────┐
-                                │          FastAPI Unified Backend              │
-                                │                 (main.py)                     │
-                                └───────────────────────┬───────────────────────┘
-                                                        │
-                         ┌──────────────────────────────┴──────────────────────────────┐
-                         │                                                             │
-                         ▼                                                             ▼
-           Text Transformation Routes                                       Visual Analysis Routes
-           (/transform, /transform-file)                                        (/visual/analyze)
-                         │                                                             │
-                         ▼                                                             ▼
-            Text Extraction Subsystem                                     Image Preprocessing Subsystem
-            (TXT / PDF / DOCX Extractor)                                      (Format Validation & RGB)
-                         │                                                             │
-                         ▼                                                             ▼
-             Ollama Qwen3 4B Service                                      Ollama Gemma 3 4B Service
-             (http://localhost:11434)                                     (http://localhost:11434)
-                         │                                                             │
-                         └──────────────────────────────┬──────────────────────────────┘
-                                                        │
-                                                        ▼
-                                           Unified Transformation Output
+```text
+FastAPI (main.py)
+|
++- Text routes: /transform, /transform-file
+|  +- TXT/PDF/DOCX extraction
+|  +- Ollama Qwen3 4B
+|  `- Text, PPTX, and video-script outputs
+|
++- Visual routes: /visual/analyze
+|  +- PIL validation and RGB conversion
+|  `- Ollama Gemma3 4B
+|
+`- Image routes: /generate-image, /generate-scene-images
+   +- Qwen scene prompt engineering
+   +- Stable Diffusion WebUI Forge API
+   `- PNG validation and generated_images/ storage
 ```
 
----
+Image generation supports two modes:
 
-## 📁 Repository Structure
+1. Direct generation: user prompt -> Stable Diffusion -> PNG.
+2. Content to images: source text or video script -> Qwen scene prompts -> one PNG per scene.
 
-```
+## Repository Layout
+
+```text
 Content Transformation/
-│
-├── main.py                         # Unified FastAPI application entry point
-│
-├── text/                           # Member 1 - Text Processing Subsystem
-│   ├── __init__.py
-│   ├── qwen_service.py             # Ollama API client for Qwen3 4B
-│   ├── document_extractor.py       # TXT, PDF, DOCX text extraction
-│   ├── schemas.py                  # Pydantic request & response models
-│   ├── routes.py                   # Text, video-audio, and audio download endpoints
-│   └── tts.py                      # edge-tts text-to-MP3 generation
-│
-├── visual/                         # Member 2 - Visual Processing Subsystem
-│   ├── __init__.py
-│   ├── gemma_model.py              # Ollama API client for Gemma 3 4B
-│   ├── image_processor.py          # PIL image validation & conversion
-│   ├── schemas.py                  # Pydantic request & response models
-│   └── routes.py                   # /visual/analyze endpoint
-│
-├── image/                           # Image generation subsystem
-│   ├── generator.py                 # Stable Diffusion WebUI API adapter
-│   ├── prompt_engine.py             # Qwen-powered scene prompt generation
-│   ├── service.py                   # PNG validation and storage
-│   └── routes.py                    # Direct and scene image endpoints
-│
-├── requirements.txt                # Consolidated Python dependencies
-├── generated_audio/                # Generated MP3 files
-└── README.md                       # Project documentation
+|- main.py                         FastAPI application and router registration
+|- requirements.txt                Application dependencies
+|- validation.py                   Output validation and normalization
+|- text/                           Text, document, PPTX, and audio services
+|- visual/                         Gemma image-analysis service
+|- image/                          Stable Diffusion generation service
+|- scripts/
+|  `- setup_image_backend.ps1      Forge and SD1.5 setup script
+|- tests/                          Automated tests
+|- generated_audio/                Local MP3 output, ignored by Git
+`- generated_images/               Local PNG output, ignored by Git
 ```
 
----
+## Prerequisites
 
-## 🚀 Setup & Quickstart Guide
+- Windows with Python 3.10 or newer.
+- Git and curl available on `PATH`.
+- Ollama installed for text and visual features.
+- An NVIDIA GPU is recommended for local generation. The tested target is an RTX 3050 Laptop GPU with 4 GB VRAM.
 
-### Prerequisites
-1. **Python 3.10+** installed.
-2. **Ollama** installed and running on your system (`http://localhost:11434`).
+## Application Setup
 
-### Step 1: Pull Required Models in Ollama
-Make sure both local models are pulled in Ollama:
-```bash
-# Pull Qwen3 4B model for text transformation
+From the project directory:
+
+```powershell
+cd "Content Transformation"
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+Pull the Ollama models:
+
+```powershell
+ollama serve
 ollama pull qwen3:4b
-
-# Pull Gemma 3 4B model for visual analysis
 ollama pull gemma3:4b
 ```
 
-Image generation uses a local Stable Diffusion WebUI-compatible server with its
-API enabled. By default the API is expected at `http://127.0.0.1:7860`. Override
-it with `IMAGE_MODEL_URL` when needed.
+Start FastAPI:
 
-To install the Forge backend without committing its checkout, model weights, or
-virtual environment, run this from PowerShell:
+```powershell
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Documentation and health URLs:
+
+- Swagger: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+- Health: http://localhost:8000/health
+
+Run only one FastAPI process at a time.
+
+## Image Backend Setup
+
+The application expects a Stable Diffusion WebUI-compatible API at:
+
+```text
+http://127.0.0.1:7860/sdapi/v1/txt2img
+```
+
+The tracked setup script keeps the large Forge checkout, model weights, and virtual environment outside this repository. Run it from `Content Transformation`:
 
 ```powershell
 .\scripts\setup_image_backend.ps1
 ```
 
-The script stores Forge beside this project, downloads the SD 1.5 checkpoint with
-resume support, and creates `start-image-api.bat` with RTX 3050-friendly settings.
+The script clones or updates Forge beside this project, downloads the SD 1.5 checkpoint with resume support, and creates `start-image-api.bat`. The checkpoint is approximately 4.27 GB.
 
-### Step 2: Install Python Dependencies
-Navigate to the `Content Transformation` directory:
-```bash
-pip install -r requirements.txt
+Start Forge in a second terminal:
+
+```powershell
+..\stable-diffusion-webui-forge\start-image-api.bat
 ```
 
-### Step 3: Run the FastAPI Server
-Start the server using `uvicorn`:
-```bash
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+The launcher uses settings suitable for a 4 GB RTX 3050:
+
+```text
+--api --listen --port 7860
+--always-offload-from-vram --cuda-malloc --opt-sdp-attention
 ```
 
-Once running, access interactive API documentation at:
-- **Interactive Swagger Docs**: `http://localhost:8000/docs`
-- **ReDoc API Docs**: `http://localhost:8000/redoc`
+Verify Forge before calling FastAPI:
 
----
-
-## 📡 API Endpoints Reference
-
-### 1. Direct Text Transformation (`POST /transform`)
-Transforms raw text content into selected deliverable.
-
-**Request Body (`JSON` - Single or Multi-Output Selection):**
-```json
-{
-  "text": "Artificial Intelligence is rapidly evolving, impacting healthcare, finance, and software development.",
-  "output_types": ["summary", "linkedin", "presentation"],
-  "audience": "Tech Professionals",
-  "tone": "Professional",
-  "language": "English",
-  "detail_level": "Medium",
-  "objective": "Inform"
-}
-```
-*Note: Both single `output_type` ("linkedin") and multi `output_types` (["summary", "linkedin"]) are supported for backward compatibility.*
-
-**Supported output types**: `linkedin`, `twitter`, `summary`, `advisory`, `presentation`, `video_script`, `infographic`.
-
-*Note: `infographic` and `video_script` return rich structured JSON objects containing visual hierarchy/storyboards, scene visual descriptions, music recommendations, voice-over directions, and thumbnail concepts.*
-
-**Sample Multi-Output Response (`JSON`):**
-```json
-{
-  "output_types": ["summary", "video_script", "infographic"],
-  "audience": "Tech Professionals",
-  "tone": "Professional",
-  "language": "English",
-  "detail_level": "Medium",
-  "objective": "Inform",
-  "outputs": {
-    "summary": "AI summary content...",
-    "video_script": {
-      "video_title": "AI Transformation in 2026",
-      "duration": "60 seconds",
-      "storyboard": [
-        {
-          "scene": 1,
-          "duration": "0-10 sec",
-          "visuals": "Futuristic digital city with data overlays",
-          "narration": "Artificial Intelligence is transforming enterprise software...",
-          "on_screen_text": "78% Enterprise AI Adoption",
-          "subtitle": "Artificial Intelligence is transforming enterprise software...",
-          "transition": "Fade to Next Scene"
-        }
-      ],
-      "music_recommendation": "Modern ambient electronic track",
-      "voice_over_direction": "Confident, clear, and articulate narrative tone",
-      "thumbnail_recommendation": "High contrast title text over glowing digital network graphic"
-    },
-    "infographic": {
-      "title": "AI Impact Overview",
-      "main_message": "Key adoption statistics...",
-      "key_statistics": ["78% adoption"],
-      "sections": [],
-      "supporting_text": "...",
-      "visual_hierarchy": "...",
-      "icon_recommendations": [],
-      "color_recommendations": [],
-      "layout_recommendation": "..."
-    }
-  }
-}
+```powershell
+Invoke-WebRequest http://127.0.0.1:7860/sdapi/v1/samplers -UseBasicParsing
 ```
 
----
+If the image backend uses another address, set this before starting FastAPI:
 
-### 2. Document File Transformation (`POST /transform-file`)
-Extracts text from `.txt`, `.pdf`, or `.docx` files and transforms it into the requested format(s).
+```powershell
+$env:IMAGE_MODEL_URL = "http://127.0.0.1:7860"
+```
 
-### 3. Direct Image Generation (`POST /generate-image`)
+## Image API
 
-Generates one PNG from a user prompt through the configured Stable Diffusion API.
+### Direct image generation
+
+`POST /generate-image` accepts JSON. Defaults are 512x512 and 20 steps for a 4 GB GPU.
+
+Request:
 
 ```json
 {
@@ -208,81 +146,166 @@ Generates one PNG from a user prompt through the configured Stable Diffusion API
 }
 ```
 
-The response includes `filename` and `image_path`. Retrieve the image with
-`GET /image/{filename}`.
+Optional request fields are `negative_prompt`, `width`, `height`, and `steps`.
 
-### 4. Content-to-Scene Images (`POST /generate-scene-images`)
+Response:
 
-Accepts a video script or source text, asks Qwen3 to create one detailed prompt
-per scene, and renders the resulting images. For TXT, PDF, and DOCX uploads,
-use `POST /generate-scene-images-from-file`.
-
-**Form Data:**
-- `file`: Uploaded file (`.txt`, `.pdf`, `.docx`)
-- `output_types`: Comma-separated or JSON list (e.g. `summary,linkedin,presentation`) or legacy `output_type`
-- `audience`, `tone`, `language`, `detail_level`, `objective`
-
----
-
-### 3. Visual Analysis (`POST /visual/analyze`)
-Analyzes uploaded images (`.jpg`, `.jpeg`, `.png`) using Gemma 3 4B.
-
-**Form Data:**
-- `image`: Image file
-- `task`: One of `description`, `ocr`, `objects`, `summary`
-- `prompt`: Additional prompt or guidance
-
-**Sample Response (`JSON`):**
 ```json
 {
   "status": "success",
-  "message": "Image analyzed successfully.",
-  "result": {
-    "description": "A financial report dashboard with sales charts and key performance metrics.",
-    "objects": ["bar chart", "line graph", "data table"],
-    "visible_text": ["Q3 Revenue Report", "Total Sales: $450,000"],
-    "important_details": ["Sales increased by 15% in Q3"]
+  "filename": "image_123456789abc.png",
+  "image_path": "generated_images/image_123456789abc.png"
+}
+```
+
+Retrieve the image with `GET /image/{filename}`.
+
+PowerShell example:
+
+```powershell
+$body = @{ prompt = "A futuristic smart city using artificial intelligence" } | ConvertTo-Json
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/generate-image" -Method Post -ContentType "application/json" -Body $body
+```
+
+### Content to scene images
+
+`POST /generate-scene-images` accepts source text or a video-script object. Qwen creates detailed image prompts and Forge renders one PNG per scene.
+
+```json
+{
+  "script": {
+    "video_title": "AI in Healthcare",
+    "storyboard": [
+      {"scene": 1, "visuals": "Doctors using AI diagnostic tools in a modern hospital"},
+      {"scene": 2, "visuals": "Doctors reviewing a glowing medical dashboard"}
+    ]
   }
 }
 ```
 
----
+`POST /generate-scene-images-from-file` accepts a TXT, PDF, or DOCX upload and extracts its text before scene generation.
 
-### 4. Downloadable PowerPoint Presentation Export (`POST /export-pptx` & `POST /export-pptx-file`)
-Generates a structured slide presentation from prompt text or document upload (`.txt`, `.pdf`, `.docx`), applies custom layout engines, attaches speaker notes to every slide, and returns a binary downloadable `.pptx` file.
+Image error statuses:
 
-- **`POST /export-pptx`** (JSON Request Body): Returns binary `.pptx` download.
-- **`POST /export-pptx-file`** (Form Data Upload): Returns binary `.pptx` download.
+- `503`: Ollama or Stable Diffusion is unavailable.
+- `502`: the model returned invalid image data.
+- `400`: invalid request or unsupported document type.
+- `404`: generated PNG was not found.
 
-**Response Header:**
+## Other Endpoints
+
+Text and documents:
+
+- `POST /transform`: transform direct text.
+- `POST /transform-file`: transform TXT, PDF, or DOCX.
+- Output types: `linkedin`, `twitter`, `summary`, `advisory`, `presentation`, `video_script`, and `infographic`.
+
+Visual analysis:
+
+- `POST /visual/analyze`: analyze JPG, JPEG, or PNG with Gemma3.
+- Form fields: `image`, `task`, and optional `prompt`.
+- Tasks: `description`, `ocr`, `objects`, and `summary`.
+
+Presentations:
+
+- `POST /export-pptx`: create a PPTX from JSON text input.
+- `POST /export-pptx-file`: create a PPTX from a TXT, PDF, or DOCX upload.
+
+Audio:
+
+- `POST /generate-audio`: convert plain text to MP3.
+- `POST /generate-video-audio`: convert a video script to MP3.
+- `GET /audio/{filename}`: download generated audio.
+- `GET /audio-voices`: list recommended voices.
+
+Service information:
+
+- `GET /`: service summary.
+- `GET /health`: health check.
+- `GET /models` and `GET /v1/models`: configured model list.
+
+## Testing
+
+Run image endpoint tests without a GPU or external model; model calls are mocked:
+
+```powershell
+cd "Content Transformation"
+.\.venv\Scripts\python.exe -m pytest tests/test_image_generation.py -q
 ```
-Content-Type: application/vnd.openxmlformats-officedocument.presentationml.presentation
-Content-Disposition: attachment; filename="presentation.pptx"
+
+Run the full suite:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
 ```
 
----
+Run a live 512x512 image smoke test after FastAPI and Forge are running:
 
-### 5. Video Script to MP3 (`POST /generate-video-audio`)
-Converts a generated `video_script` object or raw video-script JSON into one MP3 file. The endpoint extracts each storyboard scene's narration and uses `edge-tts` with the selected neural voice.
+```powershell
+$body = @{
+  prompt = "A futuristic smart city using artificial intelligence"
+  width = 512
+  height = 512
+  steps = 20
+} | ConvertTo-Json
 
-**Request Body:**
-```json
-{
-  "video_script": {
-    "video_title": "AI in Healthcare",
-    "storyboard": [
-      {"scene": 1, "narration": "Welcome to the future of healthcare."}
-    ]
-  },
-  "voice": "en-IN-NeerjaNeural"
-}
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/generate-image" -Method Post -ContentType "application/json" -Body $body
 ```
 
-Use `POST /generate-audio` for plain text, and `GET /audio/{filename}` to stream or download any generated MP3. `GET /audio-voices` lists the recommended US, UK, and India voices.
+## RTX 3050 4 GB Guidance
 
-The complete document flow is: `POST /transform-file` with `output_type=video_script`, then pass `outputs.video_script` to `POST /generate-video-audio`.
+- Use 512x512 resolution.
+- Use 20 steps as the default.
+- Generate one image at a time.
+- Keep `--always-offload-from-vram` enabled.
+- Increase resolution or steps only after confirming available VRAM.
 
----
+## Git and Generated Files
 
-## 🛡 License & Acknowledgments
-Built for the Gen AI Automated Content Transformation Hackathon.
+The repository tracks source code, tests, documentation, and setup scripts. It ignores runtime outputs and model files, including:
+
+```text
+generated_audio/
+generated_images/
+*.safetensors
+venv/
+.venv/
+```
+
+Do not commit the Forge checkout, virtual environment, model checkpoint, or generated media. The setup script is the reproducible way to install the backend locally.
+
+## Troubleshooting
+
+### Image model unavailable
+
+Check Forge first:
+
+```powershell
+Invoke-WebRequest http://127.0.0.1:7860/sdapi/v1/samplers -UseBasicParsing
+```
+
+Then check FastAPI:
+
+```powershell
+Invoke-WebRequest http://127.0.0.1:8000/health -UseBasicParsing
+```
+
+### Forge reports an invalid argument
+
+Use the generated `start-image-api.bat`. Current Forge uses `--listen` as a flag and uses `--always-offload-from-vram` instead of the removed `--medvram`.
+
+### NumPy ABI warning
+
+Forge's compiled dependencies require NumPy 1.x. Repair its environment with:
+
+```powershell
+..\stable-diffusion-webui-forge\venv\Scripts\python.exe -m pip install "numpy<2"
+```
+
+### GPU memory errors
+
+Keep generation at 512x512 and 20 steps, generate one image at a time, and keep the supplied offload settings enabled.
+
+## License and Acknowledgments
+
+Built for the Gen AI Automated Content Transformation project. Local model licenses and usage terms remain the responsibility of the model and backend distributors.
