@@ -1,0 +1,38 @@
+{
+  "entities": {
+    "HistoryItem": {
+      "title": "HistoryItem",
+      "description": "Saved content transformation history item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sourceText": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "outputs": { "type": "object" },
+        "score": { "type": "number" }
+      },
+      "required": ["id", "sourceText", "timestamp"]
+    },
+    "CustomTemplate": {
+      "title": "CustomTemplate",
+      "description": "User saved custom template",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "config": { "type": "object" }
+      },
+      "required": ["id", "name"]
+    }
+  },
+  "firestore": {
+    "/history/{historyId}": {
+      "schema": { "$ref": "#/entities/HistoryItem" },
+      "description": "User content transformation history collection"
+    },
+    "/templates/{templateId}": {
+      "schema": { "$ref": "#/entities/CustomTemplate" },
+      "description": "User custom templates collection"
+    }
+  }
+}

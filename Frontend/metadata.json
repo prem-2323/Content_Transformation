@@ -1,0 +1,7 @@
+{
+  "name": "GenAI Content Transformation Platform",
+  "description": "Unified AI platform for automated multi-channel content transformation with UCKR fact-grounded consistency engine.",
+  "requestFramePermissions": ["clipboard-read", "clipboard-write"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
