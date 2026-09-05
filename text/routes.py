@@ -1,10 +1,11 @@
 import json
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Response
 from typing import Optional, List
 
 from .qwen_service import QwenServiceError, generate_with_qwen
 from .document_extractor import extract_txt, extract_pdf, extract_docx
 from .schemas import TextRequest, TextResponse, FileTextResponse
+from .pptx_generator import create_pptx_presentation
 
 router = APIRouter(tags=["Text Transformation"])
 
@@ -34,9 +35,44 @@ and recommended actions.
 """,
 
     "presentation": """
-Create presentation-ready content.
-Organize the information into a title and clear slide-wise bullet points.
-Keep each slide concise.
+Create structured content for a PowerPoint presentation.
+Return ONLY valid JSON (no markdown formatting, no code fences) with exactly this structure:
+{
+  "presentation_title": "Main Presentation Title",
+  "subtitle": "Subtitle or Deck Summary",
+  "slides": [
+    {
+      "slide_number": 1,
+      "title": "Title Slide Title",
+      "layout": "title",
+      "subtitle": "Cover Subtitle",
+      "content": [],
+      "speaker_notes": "Welcome audience to the presentation.",
+      "visual_recommendation": "Modern graphic concept"
+    },
+    {
+      "slide_number": 2,
+      "title": "Key Market Insights",
+      "layout": "bullet_points",
+      "content": [
+        "Key insight bullet point 1",
+        "Key insight bullet point 2",
+        "Key insight bullet point 3"
+      ],
+      "speaker_notes": "Detailed spoken narration for this slide.",
+      "visual_recommendation": "Bar chart comparing key growth metrics"
+    },
+    {
+      "slide_number": 3,
+      "title": "Strategic Roadmap",
+      "layout": "two_column",
+      "column_left": ["Action step 1", "Action step 2"],
+      "column_right": ["Expected outcome 1", "Expected outcome 2"],
+      "speaker_notes": "Explain how operational actions lead to outcomes.",
+      "visual_recommendation": "Two-column grid layout with accent borders"
+    }
+  ]
+}
 """,
 
     "video_script": """
@@ -84,9 +120,9 @@ Return ONLY valid JSON (no markdown formatting, no code fences) with exactly the
 
 
 def parse_output_content(generated_text: str, output_type: str):
-    """Parse generated text into structured dict if infographic, video_script, or valid JSON, else return raw string."""
+    """Parse generated text into structured dict if infographic, video_script, presentation, or valid JSON, else return raw string."""
     ot_lower = output_type.lower()
-    if ot_lower not in ["infographic", "video_script"]:
+    if ot_lower not in ["infographic", "video_script", "presentation"]:
         return generated_text
 
     cleaned = generated_text.strip()
@@ -128,6 +164,20 @@ def parse_output_content(generated_text: str, output_type: str):
                                 if sb_k not in scene:
                                     scene[sb_k] = idx if sb_k == "scene" else ""
                 return data
+            elif ot_lower == "presentation":
+                if "presentation_title" not in data and "title" in data:
+                    data["presentation_title"] = data["title"]
+                if "slides" not in data or not isinstance(data["slides"], list):
+                    data["slides"] = []
+                for idx, s in enumerate(data["slides"], 1):
+                    if isinstance(s, dict):
+                        s.setdefault("slide_number", idx)
+                        s.setdefault("title", f"Slide {idx}")
+                        s.setdefault("layout", "bullet_points")
+                        s.setdefault("content", [])
+                        s.setdefault("speaker_notes", "")
+                        s.setdefault("visual_recommendation", "")
+                return data
     except Exception:
         pass
 
@@ -161,6 +211,28 @@ def parse_output_content(generated_text: str, output_type: str):
             "music_recommendation": "Uplifting ambient background music",
             "voice_over_direction": "Professional, engaging, and clear delivery",
             "thumbnail_recommendation": "High contrast headline text with modern tech graphic"
+        }
+    elif ot_lower == "presentation":
+        return {
+            "presentation_title": "Executive Presentation",
+            "subtitle": "Overview and Summary",
+            "slides": [
+                {
+                    "slide_number": 1,
+                    "title": "Executive Presentation",
+                    "layout": "title",
+                    "subtitle": "Overview and Summary",
+                    "speaker_notes": "Welcome to the presentation."
+                },
+                {
+                    "slide_number": 2,
+                    "title": "Key Highlights",
+                    "layout": "bullet_points",
+                    "content": [line.strip() for line in generated_text.split("\n") if line.strip()][:5],
+                    "speaker_notes": generated_text,
+                    "visual_recommendation": "Bullet list with modern icon callouts"
+                }
+            ]
         }
 
 
@@ -368,4 +440,111 @@ Important:
             status_code=500,
             detail=f"File processing failed: {str(e)}"
         )
+
+
+@router.post("/export-pptx")
+def export_pptx(request: TextRequest):
+    """Generate structured slides using Qwen3 4B and return a downloadable Microsoft PowerPoint (.pptx) file."""
+    output_instruction = OUTPUT_INSTRUCTIONS["presentation"]
+    prompt = f"""
+You are a professional presentation designer AI.
+
+Transform the source content into a structured PowerPoint presentation.
+
+SOURCE CONTENT:
+{request.text}
+
+AUDIENCE: {request.audience}
+TONE: {request.tone}
+LANGUAGE: {request.language}
+DETAIL LEVEL: {request.detail_level}
+OBJECTIVE: {request.objective}
+
+TRANSFORMATION INSTRUCTIONS:
+{output_instruction}
+
+Important:
+- Return ONLY valid JSON for the presentation structure.
+"""
+    try:
+        raw_text = generate_with_qwen(prompt)
+        parsed_presentation = parse_output_content(raw_text, "presentation")
+        pptx_stream = create_pptx_presentation(parsed_presentation)
+    except QwenServiceError as error:
+        raise HTTPException(status_code=504, detail=str(error)) from error
+    except Exception as err:
+        raise HTTPException(status_code=500, detail=f"PPTX generation failed: {str(err)}")
+
+    filename = "presentation.pptx"
+    return Response(
+        content=pptx_stream.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@router.post("/export-pptx-file")
+async def export_pptx_file(
+    file: UploadFile = File(...),
+    audience: str = Form("General public"),
+    tone: str = Form("Professional"),
+    language: str = Form("English"),
+    detail_level: str = Form("Medium"),
+    objective: str = Form("Inform")
+):
+    """Extract document content (TXT, PDF, DOCX), generate structured slides, and return downloadable PowerPoint (.pptx) file."""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename is missing.")
+
+    filename_lower = file.filename.lower()
+    if not (filename_lower.endswith(".txt") or filename_lower.endswith(".pdf") or filename_lower.endswith(".docx")):
+        raise HTTPException(status_code=400, detail="Only TXT, PDF and DOCX files are supported.")
+
+    try:
+        if filename_lower.endswith(".txt"):
+            extracted_text = extract_txt(file)
+        elif filename_lower.endswith(".pdf"):
+            extracted_text = extract_pdf(file)
+        elif filename_lower.endswith(".docx"):
+            extracted_text = extract_docx(file)
+
+        if not extracted_text.strip():
+            raise HTTPException(status_code=400, detail="The uploaded file contains no extractable text.")
+
+        output_instruction = OUTPUT_INSTRUCTIONS["presentation"]
+        prompt = f"""
+You are a professional presentation designer AI.
+
+Transform the extracted document content into a structured PowerPoint presentation.
+
+SOURCE CONTENT:
+{extracted_text}
+
+AUDIENCE: {audience}
+TONE: {tone}
+LANGUAGE: {language}
+DETAIL LEVEL: {detail_level}
+OBJECTIVE: {objective}
+
+TRANSFORMATION INSTRUCTIONS:
+{output_instruction}
+
+Important:
+- Return ONLY valid JSON for the presentation structure.
+"""
+        raw_text = generate_with_qwen(prompt)
+        parsed_presentation = parse_output_content(raw_text, "presentation")
+        pptx_stream = create_pptx_presentation(parsed_presentation)
+
+        out_name = file.filename.rsplit(".", 1)[0] + ".pptx"
+        return Response(
+            content=pptx_stream.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            headers={"Content-Disposition": f'attachment; filename="{out_name}"'}
+        )
+    except HTTPException:
+        raise
+    except Exception as err:
+        raise HTTPException(status_code=500, detail=f"PPTX file generation failed: {str(err)}")
+
 

@@ -207,5 +207,19 @@ Analyzes uploaded images (`.jpg`, `.jpeg`, `.png`) using Gemma 3 4B.
 
 ---
 
+### 4. Downloadable PowerPoint Presentation Export (`POST /export-pptx` & `POST /export-pptx-file`)
+Generates a structured slide presentation from prompt text or document upload (`.txt`, `.pdf`, `.docx`), applies custom layout engines, attaches speaker notes to every slide, and returns a binary downloadable `.pptx` file.
+
+- **`POST /export-pptx`** (JSON Request Body): Returns binary `.pptx` download.
+- **`POST /export-pptx-file`** (Form Data Upload): Returns binary `.pptx` download.
+
+**Response Header:**
+```
+Content-Type: application/vnd.openxmlformats-officedocument.presentationml.presentation
+Content-Disposition: attachment; filename="presentation.pptx"
+```
+
+---
+
 ## 🛡 License & Acknowledgments
 Built for the Gen AI Automated Content Transformation Hackathon.
