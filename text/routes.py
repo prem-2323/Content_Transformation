@@ -10,6 +10,7 @@ from validation import (
     validate_output_types,
     validate_source_text,
     validate_and_clean_model_response,
+    extract_json_payload,
     validate_and_format_twitter,
     validate_and_format_infographic,
     validate_and_format_video_script,
@@ -21,31 +22,39 @@ router = APIRouter(tags=["Text Transformation"])
 OUTPUT_INSTRUCTIONS = {
     "linkedin": """
 Create a professional LinkedIn post.
-Use an engaging opening, clear paragraphs, and relevant hashtags.
-Do not mention that you are an AI.
+Return ONLY valid JSON matching this exact structure:
+{
+  "content": "Professional LinkedIn post text with an engaging opening, clear paragraphs, and relevant hashtags."
+}
 """,
 
     "twitter": """
 Create a concise X/Twitter post or thread.
-Keep the content short, engaging, and easy to read.
-Use hashtags only when useful.
+Return ONLY valid JSON matching this exact structure:
+{
+  "content": "Concise X/Twitter post or thread text."
+}
 """,
 
     "summary": """
 Create a clear executive summary.
-Include the most important information, key points, and conclusions.
-Avoid unnecessary details.
+Return ONLY valid JSON matching this exact structure:
+{
+  "content": "Executive summary text including key points and conclusions."
+}
 """,
 
     "advisory": """
 Create a professional advisory.
-Clearly explain the situation, important information, potential impact,
-and recommended actions.
+Return ONLY valid JSON matching this exact structure:
+{
+  "content": "Professional advisory text explaining situation, potential impact, and recommended actions."
+}
 """,
 
     "presentation": """
 Create structured content for a PowerPoint presentation.
-Return ONLY valid JSON (no markdown formatting, no code fences) with exactly this structure:
+Return ONLY valid JSON with exactly this structure:
 {
   "presentation_title": "Main Presentation Title",
   "subtitle": "Subtitle or Deck Summary",
@@ -86,7 +95,7 @@ Return ONLY valid JSON (no markdown formatting, no code fences) with exactly thi
 
     "video_script": """
 Create a Complete Video Package and production storyboard.
-Return ONLY valid JSON (no markdown formatting, no code fences) with exactly these keys:
+Return ONLY valid JSON with exactly these keys:
 {
   "video_title": "Catchy and professional title for the video",
   "duration": "Total estimated duration (e.g. 60 seconds)",
@@ -109,7 +118,7 @@ Return ONLY valid JSON (no markdown formatting, no code fences) with exactly the
 
     "infographic": """
 Create structured content for an Infographic.
-Return ONLY valid JSON (no markdown formatting, no code fences) with exactly these keys:
+Return ONLY valid JSON with exactly these keys:
 {
   "title": "Concise headline title for the infographic",
   "main_message": "Core takeaway message",
@@ -133,28 +142,30 @@ def parse_output_content(generated_text: str, output_type: str):
     cleaned_text = validate_and_clean_model_response(generated_text)
     ot_lower = output_type.lower()
 
-    if ot_lower == "twitter":
-        return validate_and_format_twitter(cleaned_text)
+    # Parse JSON payload
+    parsed_json = extract_json_payload(generated_text)
 
-    if ot_lower not in ["infographic", "video_script", "presentation"]:
-        return cleaned_text
+    # 1. Text Deliverables (linkedin, twitter, summary, advisory)
+    if ot_lower in ["linkedin", "twitter", "summary", "advisory"]:
+        final_text = cleaned_text
+        if isinstance(parsed_json, dict) and "content" in parsed_json and isinstance(parsed_json["content"], str):
+            final_text = parsed_json["content"].strip()
+            
+        final_text = validate_and_clean_model_response(final_text)
+        if ot_lower == "twitter":
+            return validate_and_format_twitter(final_text)
+        return final_text
 
-    raw_json = cleaned_text
-    if raw_json.startswith("```"):
-        raw_json = raw_json.removeprefix("```").removeprefix("json").removesuffix("```").strip()
+    # 2. Structured Deliverables (infographic, video_script, presentation)
+    if isinstance(parsed_json, dict):
+        if ot_lower == "infographic":
+            return validate_and_format_infographic(parsed_json)
+        elif ot_lower == "video_script":
+            return validate_and_format_video_script(parsed_json)
+        elif ot_lower == "presentation":
+            return validate_and_format_presentation(parsed_json)
 
-    try:
-        data = json.loads(raw_json)
-        if isinstance(data, dict):
-            if ot_lower == "infographic":
-                return validate_and_format_infographic(data)
-            elif ot_lower == "video_script":
-                return validate_and_format_video_script(data)
-            elif ot_lower == "presentation":
-                return validate_and_format_presentation(data)
-    except Exception:
-        pass
-
+    # Structured fallbacks if raw text wasn't valid JSON
     if ot_lower == "infographic":
         return validate_and_format_infographic({"main_message": cleaned_text[:150], "supporting_text": cleaned_text})
     elif ot_lower == "video_script":
@@ -225,12 +236,13 @@ OBJECTIVE:
 TRANSFORMATION INSTRUCTIONS:
 {output_instruction}
 
-Important:
-- Preserve factual information from the source.
-- Do not invent important facts.
-- Follow the requested language.
-- Follow the requested tone and audience.
-- Return only the transformed content.
+CRITICAL OUTPUT CONSTRAINTS:
+- Return ONLY valid JSON matching the requested structure.
+- Do not include reasoning or chain of thought.
+- Do not include analysis or commentary.
+- Do not include explanations.
+- Do not include markdown code fences (```json).
+- Preserve factual information from the source text.
 """
 
         try:

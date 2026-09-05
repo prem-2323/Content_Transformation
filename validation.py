@@ -82,16 +82,73 @@ def clean_reasoning_and_leakage(raw_text: str) -> str:
     cleaned = re.sub(r"(?i)<think>.*", "", cleaned, flags=re.DOTALL)
     cleaned = re.sub(r"(?i)<reasoning>.*", "", cleaned, flags=re.DOTALL)
 
-    # Strip leading/trailing whitespace
-    return cleaned.strip()
+    # Strip markdown code fences if wrapping response
+    cleaned_strip = cleaned.strip()
+    if cleaned_strip.startswith("```"):
+        cleaned_strip = re.sub(r"^```(?:json)?\s*", "", cleaned_strip, flags=re.IGNORECASE)
+        cleaned_strip = re.sub(r"\s*```$", "", cleaned_strip)
+
+    # Strip conversational preambles (e.g., "Here is the summary:", "Sure, here is...")
+    cleaned_strip = re.sub(r"(?i)^(here is|sure|certainly|below is|the following is|here are).*?:\s*", "", cleaned_strip)
+
+    return cleaned_strip.strip()
+
+
+def extract_json_payload(raw_text: str) -> Union[dict, list, None]:
+    """
+    Locate and parse JSON structure inside raw model text.
+    Handles responses wrapped in code fences or preambles.
+    """
+    cleaned = clean_reasoning_and_leakage(raw_text)
+    if not cleaned:
+        return None
+
+    # Direct json loads attempt
+    try:
+        data = json.loads(cleaned)
+        if isinstance(data, (dict, list)):
+            return data
+    except Exception:
+        pass
+
+    # Regex search for outer JSON object or array bounds
+    first_brace = cleaned.find("{")
+    last_brace = cleaned.rfind("}")
+    if first_brace != -1 and last_brace > first_brace:
+        json_candidate = cleaned[first_brace:last_brace + 1]
+        try:
+            data = json.loads(json_candidate)
+            if isinstance(data, (dict, list)):
+                return data
+        except Exception:
+            pass
+
+    first_bracket = cleaned.find("[")
+    last_bracket = cleaned.rfind("]")
+    if first_bracket != -1 and last_bracket > first_bracket:
+        json_candidate = cleaned[first_bracket:last_bracket + 1]
+        try:
+            data = json.loads(json_candidate)
+            if isinstance(data, (dict, list)):
+                return data
+        except Exception:
+            pass
+
+    return None
 
 
 def validate_and_clean_model_response(generated_text: str) -> str:
     """
     Validate model response:
-    - Strips reasoning leakage.
-    - Raises HTTP 504/500 if the model returned an empty string.
+    - Strips reasoning leakage and extracts JSON 'content' field if wrapped.
+    - Raises HTTP 504 if the model returned an empty string.
     """
+    parsed = extract_json_payload(generated_text)
+    if isinstance(parsed, dict) and "content" in parsed and isinstance(parsed["content"], str):
+        content = parsed["content"].strip()
+        if content:
+            return clean_reasoning_and_leakage(content)
+
     cleaned = clean_reasoning_and_leakage(generated_text)
     if not cleaned:
         raise HTTPException(

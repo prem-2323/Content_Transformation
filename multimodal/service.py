@@ -97,10 +97,13 @@ OBJECTIVE: {objective}
 === TRANSFORMATION INSTRUCTIONS ===
 {output_instruction}
 
-Important:
-- Combine insights from both the document text and the visual images.
-- Follow the requested tone, language, and target audience.
-- Produce a clean, comprehensive, professional result. Return ONLY the transformed content.
+CRITICAL OUTPUT CONSTRAINTS:
+- Return ONLY valid JSON matching the requested structure.
+- Do not include reasoning or chain of thought.
+- Do not include analysis or commentary.
+- Do not include explanations.
+- Do not include markdown code fences (```json).
+- Combine insights from both the document text and visual image analysis.
 """
 
         raw_output = generate_with_qwen(synthesis_prompt)
