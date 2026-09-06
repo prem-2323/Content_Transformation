@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { FileText, Copy, Download, Edit3, Check, Eye, ShieldCheck, DownloadCloud, Maximize2, X, Volume2, VolumeX, Square, Layers, BarChart3, Mail, Presentation, Video, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { ContentIntelligence } from './ContentIntelligence';
@@ -45,6 +45,8 @@ export const ResultsWorkspace: React.FC<ResultsWorkspaceProps> = ({ transformati
   const [videoUrl, setVideoUrl] = useState('');
   const [mediaError, setMediaError] = useState('');
   const [mp3Tracks, setMp3Tracks] = useState<Record<string, { url?: string; filename?: string; loading: boolean; error?: string }>>({});
+  const [playingAddon, setPlayingAddon] = useState<string | null>(null);
+  const audioRefs = useRef<Record<string, HTMLAudioElement | null>>({});
 
   // MP3 voiceover add-ons requested on the Transform tab (POST /generate-audio on demand)
   const mp3Addons: string[] = transformationResult?.mp3_addons || [];
@@ -66,6 +68,18 @@ export const ResultsWorkspace: React.FC<ResultsWorkspaceProps> = ({ transformati
         ...prev,
         [addon]: { loading: false, error: error instanceof Error ? error.message : 'MP3 synthesis failed.' },
       }));
+    }
+  };
+
+  const handleToggleMp3Playback = async (addon: string) => {
+    const player = audioRefs.current[addon];
+    if (!player) return;
+    if (player.paused) {
+      await player.play();
+      setPlayingAddon(addon);
+    } else {
+      player.pause();
+      setPlayingAddon(null);
     }
   };
 
@@ -353,7 +367,26 @@ export const ResultsWorkspace: React.FC<ResultsWorkspaceProps> = ({ transformati
                   <div className="flex items-center gap-2">
                     {track?.url ? (
                       <>
-                        <audio controls src={track.url} className="h-8 w-56" />
+                        <audio
+                          ref={(element) => { audioRefs.current[addon] = element; }}
+                          controls
+                          preload="auto"
+                          src={track.url}
+                          onPlay={() => setPlayingAddon(addon)}
+                          onPause={() => setPlayingAddon(null)}
+                          onEnded={() => setPlayingAddon(null)}
+                          className="h-8 w-56"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void handleToggleMp3Playback(addon)}
+                          aria-label={playingAddon === addon ? 'Pause voiceover' : 'Play voiceover'}
+                          title={playingAddon === addon ? 'Pause voiceover' : 'Play voiceover'}
+                          className="inline-flex items-center gap-1 rounded-full border border-[#1ed760]/50 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-[#1ed760]"
+                        >
+                          {playingAddon === addon ? <Square className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
+                          <span>{playingAddon === addon ? 'Pause' : 'Play'}</span>
+                        </button>
                         <a href={track.url} download={track.filename || 'generated_audio.mp3'} className="px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-[#1ed760] text-black">
                           Download
                         </a>

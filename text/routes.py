@@ -884,10 +884,19 @@ async def get_audio(filename: str):
             detail=f"Audio file '{filename}' not found."
         )
 
+    file_size = candidate.stat().st_size
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(file_size),
+        "Content-Disposition": f'inline; filename="{candidate.name}"',
+        "Access-Control-Allow-Origin": "*"
+    }
+
     return FileResponse(
         path=str(candidate),
         media_type="audio/mpeg",
-        filename=candidate.name
+        filename=candidate.name,
+        headers=headers
     )
 
 

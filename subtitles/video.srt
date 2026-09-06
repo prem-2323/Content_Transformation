@@ -1,23 +1,23 @@
 1
-00:00:00,000 --> 00:00:05,200
-Explain quantum computing and enterprise AI transformation
+00:00:00,000 --> 00:00:10,990
+Our solution, Gen AI Content Transformation, addresses the difficulty of converting large and complex content into useful, easy-to-understand formats
 
 2
-00:00:05,200 --> 00:00:10,400
-Explain quantum computing and enterprise AI transformation
+00:00:10,990 --> 00:00:25,480
+The platform uses Generative AI to analyze a single source such as a PDF or text and transform it into summaries, simplified explanations, Q&A, presentations, scripts, and multilingual content
 
 3
-00:00:10,400 --> 00:00:15,600
-Explain quantum computing and enterprise AI transformation
+00:00:25,480 --> 00:00:37,550
+Unlike separate AI tools for each task, our system provides a unified transformation engine where users can choose the format, detail level, language, and target audience
 
 4
-00:00:15,600 --> 00:00:20,800
-Explain quantum computing and enterprise AI transformation
+00:00:37,550 --> 00:00:47,580
+This reduces manual effort, saves time, and makes information more accessible for students, educators, professionals, and organizations
 
 5
-00:00:20,800 --> 00:00:26,000
-Explain quantum computing and enterprise AI transformation
+00:00:47,580 --> 00:00:58,570
+Our solution, Gen AI Content Transformation, addresses the difficulty of converting large and complex content into useful, easy-to-understand formats
 
 6
-00:00:26,000 --> 00:00:31,200
-Explain quantum computing and enterprise AI transformation
+00:00:58,570 --> 00:01:13,060
+The platform uses Generative AI to analyze a single source such as a PDF or text and transform it into summaries, simplified explanations, Q&A, presentations, scripts, and multilingual content

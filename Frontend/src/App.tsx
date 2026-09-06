@@ -121,11 +121,12 @@ export default function App() {
       const updatedHistory = [historyItem, ...existingHistory];
       localStorage.setItem('contentforge_transformation_history', JSON.stringify(updatedHistory));
 
-      try {
-        await setDoc(doc(db, 'history', historyItem.id), historyItem);
-      } catch (err) {
+      // Do not block the transformation result on an optional Firestore sync.
+      // A missing or unavailable Firebase database must not leave the form in
+      // its loading state after the backend has already returned successfully.
+      void setDoc(doc(db, 'history', historyItem.id), historyItem).catch((err) => {
         console.error("Failed to save history to Firestore:", err);
-      }
+      });
 
       setActiveTab('processing');
     } catch (error) {

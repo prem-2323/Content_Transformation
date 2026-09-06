@@ -1,6 +1,13 @@
-import json
+import asyncio
 import edge_tts
+import json
+import os
+import shutil
+import subprocess
+import tempfile
 from typing import Dict, Any, Union
+
+import pyttsx3
 
 RECOMMENDED_VOICES: Dict[str, str] = {
     # Indian Languages
@@ -34,13 +41,39 @@ async def generate_audio(
     output_file: str,
     voice: str = "en-US-AriaNeural"
 ) -> str:
-    """Generate MP3 audio file from text using edge-tts."""
-    communicate = edge_tts.Communicate(
-        text=text,
-        voice=voice
-    )
-    await communicate.save(output_file)
+    """Generate MP3 audio, using local Windows speech if Edge TTS is unavailable."""
+    communicate = edge_tts.Communicate(text=text, voice=voice)
+    try:
+        await asyncio.wait_for(communicate.save(output_file), timeout=15.0)
+        return output_file
+    except Exception:
+        await asyncio.to_thread(_generate_local_audio, text, output_file)
     return output_file
+
+
+def _generate_local_audio(text: str, output_file: str) -> None:
+    """Create an MP3 with the Windows SAPI voice through pyttsx3."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RuntimeError("Edge TTS is unavailable and FFmpeg is not installed for local audio fallback.")
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        wav_path = os.path.join(temp_dir, "voiceover.wav")
+        engine = pyttsx3.init()
+        engine.save_to_file(text, wav_path)
+        engine.runAndWait()
+        engine.stop()
+        if not os.path.exists(wav_path) or os.path.getsize(wav_path) == 0:
+            raise RuntimeError("Local speech synthesis did not produce audio.")
+
+        result = subprocess.run(
+            [ffmpeg, "-y", "-loglevel", "error", "-i", wav_path, output_file],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip() or "FFmpeg could not encode the local voiceover.")
 
 
 def extract_video_script_narration(video_script_input: Union[Dict[str, Any], str]) -> str:

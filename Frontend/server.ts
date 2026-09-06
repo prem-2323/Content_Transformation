@@ -277,6 +277,26 @@ Return a valid JSON object with:
     });
   });
 
+  // Audio Streaming / Proxy Endpoint
+  app.get(["/audio/:filename", "/api/audio/:filename"], async (req, res) => {
+    try {
+      const filename = req.params.filename;
+      const targetUrl = `http://localhost:8000/audio/${filename}`;
+      const response = await fetch(targetUrl);
+      if (!response.ok) {
+        return res.status(response.status).send("Audio file not found");
+      }
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("Accept-Ranges", "bytes");
+      res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+      const buffer = await response.arrayBuffer();
+      res.send(Buffer.from(buffer));
+    } catch (err: any) {
+      console.error("Audio proxy error:", err.message);
+      res.status(500).send("Error streaming audio");
+    }
+  });
+
   // 6. Central Fact Registry Facts
   app.get("/api/consistency/registry/:source_id/facts", (req, res) => {
     const q = req.query.q as string || "";
