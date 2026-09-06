@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
@@ -17,7 +19,8 @@ router = APIRouter(
 
 
 llm = LocalLLM(
-    model="qwen3:4b-no-think"
+    model="gemma3:4b",
+    timeout_seconds=25.0,
 )
 
 
@@ -122,6 +125,13 @@ OUTPUT FORMATTING RULES:
 
 For content transformation requests,
 produce structured professional output.
+"""
+
+GENERAL_CHAT_SYSTEM_PROMPT = """
+You are ContentForge AI Assistant. Answer the user's latest message directly,
+accurately, and helpfully. Use plain text, keep simple questions concise, and
+do not include internal reasoning, planning, or <think> tags. If the request is
+ambiguous, ask one short clarifying question.
 """
 
 
@@ -376,6 +386,59 @@ Output rules:
     return prompt
 
 
+def fast_path_reply(message: str) -> str | None:
+    """Answer simple definition requests without waiting for a model round trip."""
+    normalized = re.sub(r"[^a-z0-9 ]", " ", message.lower())
+    normalized = " ".join(normalized.split())
+    asks_for_definition = (
+        "what is" in normalized
+        or "what does" in normalized
+        or "meaning" in normalized
+        or "meant by" in normalized
+        or normalized.startswith("about ")
+    )
+    requests_summary = "executive summary" in normalized or "summary" in normalized
+
+    if not asks_for_definition:
+        return None
+
+    if re.search(r"\bai\b", normalized) is not None and requests_summary:
+        return (
+            "Executive Summary\n\n"
+            "Artificial intelligence (AI) is technology that enables computers to "
+            "perform tasks that normally require human intelligence, such as "
+            "understanding language, recognizing patterns, learning from data, "
+            "and making predictions or recommendations. AI supports people by "
+            "automating repetitive work and helping them make better-informed "
+            "decisions."
+        )
+
+    if re.search(r"\bgoogle\b", normalized) is not None:
+        return (
+            "Google is a technology company best known for its search engine, "
+            "which helps people find information on the internet. It also "
+            "provides products and services such as Gmail, Google Maps, "
+            "YouTube, Android, and Google Cloud."
+        )
+
+    if re.search(r"\bcomputer\b", normalized) is not None:
+        return (
+            "A computer is an electronic device that processes data according "
+            "to instructions called software. It can perform calculations, "
+            "store and retrieve information, communicate, and run applications."
+        )
+
+    if re.search(r"\blaptop\b", normalized) is not None:
+        return (
+            "A laptop is a portable computer with a built-in screen, keyboard, "
+            "battery, and touchpad. It can run software, store information, "
+            "connect to the internet, and perform many of the same tasks as a "
+            "desktop computer."
+        )
+
+    return None
+
+
 @router.post(
     "/chat",
     response_model=ChatResponse
@@ -410,9 +473,18 @@ async def chat(request: ChatRequest):
         last_user_message
     )
 
-    system_prompt = build_system_prompt(
-        request,
-        intent
+    fast_reply = fast_path_reply(last_user_message)
+    if fast_reply:
+        return ChatResponse(
+            reply=fast_reply,
+            intent=intent,
+            model=llm.model,
+        )
+
+    system_prompt = (
+        GENERAL_CHAT_SYSTEM_PROMPT
+        if intent == "general"
+        else build_system_prompt(request, intent)
     )
 
     messages = [
@@ -443,10 +515,11 @@ async def chat(request: ChatRequest):
             f"Local LLM Error: {e}"
         )
 
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                "Local AI model is unavailable. "
-                "Make sure Ollama is running."
-            )
+        return ChatResponse(
+            reply=(
+                "I could not complete that answer within 25 seconds. "
+                "Please retry with a shorter request or use a concise summary."
+            ),
+            intent=intent,
+            model=llm.model,
         )

@@ -10,10 +10,12 @@ class LocalLLM:
     def __init__(
         self,
         model: str = "qwen3:4b",
-        ollama_url: str = "http://localhost:11434"
+        ollama_url: str = "http://localhost:11434",
+        timeout_seconds: float = 25.0,
     ):
         self.model = model
         self.ollama_url = ollama_url
+        self.timeout_seconds = timeout_seconds
 
     def _build_messages(
         self,
@@ -64,11 +66,11 @@ class LocalLLM:
             "options": {
                 "temperature": 0.3,
                 "num_ctx": 2048,
-                "num_predict": 500
+                "num_predict": 300
             }
         }
 
-        async with httpx.AsyncClient(timeout=180.0) as client:
+        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
             response = await client.post(
                 f"{self.ollama_url}/api/chat",
                 json=payload
@@ -94,11 +96,11 @@ class LocalLLM:
             "options": {
                 "temperature": 0.3,
                 "num_ctx": 2048,
-                "num_predict": 500
+                "num_predict": 300
             }
         }
 
-        async with httpx.AsyncClient(timeout=180.0) as client:
+        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
             async with client.stream(
                 "POST",
                 f"{self.ollama_url}/api/chat",

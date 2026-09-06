@@ -1,4 +1,5 @@
 import os
+import re
 
 import requests
 
@@ -19,41 +20,44 @@ class QwenServiceError(Exception):
 
 
 def _num_predict_for_prompt(prompt: str) -> int:
-    """Pick a tight token budget per task so consistency calls return faster."""
+    """Pick a tight token budget per task so consistency calls return faster (8-15s)."""
     lowered = (prompt or "").lower()
-    if "concise (quick read)" in lowered:
-        return 500
-    if "linkedin" in lowered and "uckr" in lowered:
-        return 600
-    if "executive summary" in lowered and "uckr" in lowered:
-        return 600
+    if "concise (quick read)" in lowered or "concise" in lowered:
+        return 180
+    if "linkedin" in lowered:
+        return 220
+    if "executive summary" in lowered or "summary" in lowered:
+        return 220
     if "storyboard" in lowered or "video producer" in lowered:
-        return 1000
+        return 380
     if "presentation" in lowered or "slide deck" in lowered:
-        return 1000
+        return 380
     if "translator" in lowered or "translate fluently" in lowered:
-        return 800
+        return 250
     if "knowledge engineering" in lowered or "atomic facts" in lowered:
-        return 1200
-    return 1000
+        return 300
+    return 250
 
 
 def generate_with_qwen(prompt: str, timeout=None, num_predict=None) -> str:
-    """Send generation prompt to local Ollama Qwen3 4B model.
+    """Send generation prompt to local Ollama Qwen model.
 
     Keeps single-arg compatibility (existing tests monkeypatch with
     ``def fake_qwen(prompt)``) while allowing optional overrides:
-    ``generate_with_qwen(prompt, timeout=20, num_predict=600)``.
+    ``generate_with_qwen(prompt, timeout=20, num_predict=200)``.
     """
     read_timeout = float(timeout) if timeout else REQUEST_TIMEOUT_SECONDS
     predict_n = int(num_predict) if num_predict else _num_predict_for_prompt(prompt)
+
     payload = {
         "model": MODEL_NAME,
-        "prompt": prompt,
+        "prompt": f"[DO NOT OUTPUT THINKING MONOLOGUE OR <think> TAGS. RESPOND DIRECTLY AND CONCISELY.]\n\n{prompt}",
         "stream": False,
         "think": False,
         "options": {
-            "num_predict": predict_n
+            "num_predict": predict_n,
+            "temperature": 0.3,
+            "top_p": 0.9
         }
     }
 
@@ -74,4 +78,9 @@ def generate_with_qwen(prompt: str, timeout=None, num_predict=None) -> str:
         ) from error
 
     data = response.json()
-    return data.get("response", "")
+    raw_text = data.get("response", "")
+
+    # Strip internal <think> reasoning tags if emitted by thinking models
+    cleaned_text = re.sub(r"<think>.*?</think>", "", raw_text, flags=re.DOTALL).strip()
+    return cleaned_text if cleaned_text else raw_text.strip()
+
