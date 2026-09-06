@@ -8,19 +8,23 @@ client = TestClient(app)
 
 
 def test_direct_image_generation_contract(monkeypatch):
-    monkeypatch.setattr(routes, "generate_and_save_image", lambda *args: "image_123.png")
+    monkeypatch.setattr(routes, "generate_and_save_image", lambda **kwargs: ("image_123.png", 2.5, "cuda"))
 
     response = client.post(
         "/generate-image",
-        json={"prompt": "A futuristic smart city using artificial intelligence"},
+        json={"prompt": "A futuristic smart city using artificial intelligence", "mode": "fast"},
     )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "status": "success",
-        "filename": "image_123.png",
-        "image_path": "generated_images/image_123.png",
-    }
+    res = response.json()
+    assert res["status"] == "success"
+    assert res["filename"] == "image_123.png"
+    assert res["image_path"] == "generated_images/image_123.png"
+    assert res["generation_time"] == 2.5
+    assert res["device"] == "cuda"
+    assert res["steps"] == 10
+    assert res["width"] == 768
+    assert res["height"] == 768
 
 
 def test_scene_generation_uses_qwen_prompts_and_scene_names(monkeypatch):
@@ -35,9 +39,9 @@ def test_scene_generation_uses_qwen_prompts_and_scene_names(monkeypatch):
         ],
     )
 
-    def fake_generate(*args):
-        captured.append(args[0])
-        return f"scene_{len(captured):02d}_abc.png"
+    def fake_generate(**kwargs):
+        captured.append(kwargs.get("prompt", ""))
+        return f"scene_{len(captured):02d}_abc.png", 1.8, "cuda"
 
     monkeypatch.setattr(routes, "generate_and_save_image", fake_generate)
 

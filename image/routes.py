@@ -15,33 +15,38 @@ from .service import generate_and_save_image, image_path
 router = APIRouter(tags=["Image Generation"])
 
 
-def _response(filename: str) -> ImageResponse:
-    return ImageResponse(
-        filename=filename,
-        image_path=f"generated_images/{filename}",
-    )
-
-
 def _generate(request: ImageRequest, prefix: str = "image") -> ImageResponse:
     try:
-        filename = generate_and_save_image(
-            request.prompt,
-            request.negative_prompt,
-            request.width,
-            request.height,
-            request.steps,
-            prefix,
+        filename, generation_time, device = generate_and_save_image(
+            prompt=request.prompt,
+            negative_prompt=request.negative_prompt,
+            width=request.width,
+            height=request.height,
+            steps=request.steps,
+            mode=request.mode,
+            prefix=prefix,
         )
     except ImageGenerationError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
-    return _response(filename)
+
+    return ImageResponse(
+        status="success",
+        filename=filename,
+        image_path=f"generated_images/{filename}",
+        image_url=f"/image/{filename}",
+        generation_time=generation_time,
+        device=device,
+        steps=request.steps,
+        width=request.width,
+        height=request.height,
+    )
 
 
 @router.post("/generate-image", response_model=ImageResponse)
 def generate_image(request: ImageRequest):
-    """Generate one image directly from a user-supplied prompt."""
+    """Generate one image directly from a user-supplied prompt with performance tracking."""
     return _generate(request)
 
 
@@ -58,6 +63,7 @@ def generate_scene_images(request: SceneImageRequest):
         image_request = ImageRequest(
             prompt=scene["prompt"],
             negative_prompt=request.negative_prompt,
+            mode=request.mode,
             width=request.width,
             height=request.height,
             steps=request.steps,

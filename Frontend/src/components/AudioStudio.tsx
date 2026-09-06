@@ -66,7 +66,7 @@ export const AudioStudio: React.FC = () => {
     setAudioUrl(null);
 
     try {
-      const res = await audioApi.generateAudio({ text: text.trim(), voice: selectedVoice });
+      const res = await audioApi.generateAudio({ text: text.trim(), voice: selectedVoice, translate_to_voice_language: true });
       setAudioMeta(res);
       const url = audioApi.getAudioUrl(res.filename || res.url || '');
       setAudioUrl(url);
@@ -95,7 +95,8 @@ export const AudioStudio: React.FC = () => {
     try {
       const res = await audioApi.generateVideoAudio({
         video_script: scriptPayload,
-        voice: selectedVoice
+        voice: selectedVoice,
+        translate_to_voice_language: true
       });
       setAudioMeta(res);
       const url = audioApi.getAudioUrl(res.filename || res.url || '');
@@ -360,6 +361,12 @@ export const AudioStudio: React.FC = () => {
                           {audioMeta.filename}
                         </span>
                       </div>
+                      {audioMeta.translated && (
+                        <div className="border-t border-white/10 pt-2 space-y-1">
+                          <span className="text-slate-400 block">Spoken text (translated to voice language):</span>
+                          <p className="text-emerald-400 whitespace-pre-wrap leading-relaxed">{audioMeta.spoken_text}</p>
+                        </div>
+                      )}
                       <div className="flex justify-between">
                         <span className="text-slate-400">Voice Model:</span>
                         <span className="font-mono text-purple-400">

@@ -8,11 +8,13 @@ export interface VoiceItem {
 export interface AudioRequest {
   text: string;
   voice?: string;
+  translate_to_voice_language?: boolean;
 }
 
 export interface VideoAudioRequest {
   video_script: Record<string, any> | string;
   voice?: string;
+  translate_to_voice_language?: boolean;
 }
 
 export interface AudioResponse {
@@ -21,6 +23,8 @@ export interface AudioResponse {
   audio_path: string;
   download_url: string;
   voice: string;
+  spoken_text: string;
+  translated: boolean;
   url?: string;
 }
 

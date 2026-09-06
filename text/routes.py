@@ -23,6 +23,7 @@ from .schemas import (
 )
 from .pptx_generator import create_pptx_presentation
 from .tts import generate_audio, RECOMMENDED_VOICES, extract_video_script_narration
+from consistency.multilingual import translate_text_with_qwen
 from validation import (
     validate_output_types,
     validate_source_text,
@@ -1179,6 +1180,29 @@ AUDIO_DIR = Path("generated_audio")
 AUDIO_DIR.mkdir(exist_ok=True)
 
 
+def _voice_language(voice: str) -> str:
+    """Return the language name represented by an Edge TTS voice ID."""
+    language_by_prefix = {
+        "ta-": "Tamil",
+        "hi-": "Hindi",
+        "te-": "Telugu",
+        "ml-": "Malayalam",
+        "kn-": "Kannada",
+        "bn-": "Bengali",
+        "mr-": "Marathi",
+        "gu-": "Gujarati",
+        "en-": "English",
+    }
+    return next((language for prefix, language in language_by_prefix.items() if voice.lower().startswith(prefix)), "English")
+
+
+def _prepare_spoken_text(text: str, voice: str, translate_to_voice_language: bool) -> tuple[str, bool]:
+    target_language = _voice_language(voice)
+    if not translate_to_voice_language or target_language == "English":
+        return text, False
+    return translate_text_with_qwen(text, target_language), True
+
+
 @router.get("/audio-voices")
 def get_audio_voices():
     """Return available TTS voices including US, UK, and India neural options."""
@@ -1199,10 +1223,13 @@ async def generate_audio_endpoint(request: AudioRequest):
 
     filename = f"{uuid.uuid4()}.mp3"
     output_path = AUDIO_DIR / filename
+    spoken_text, translated = _prepare_spoken_text(
+        request.text.strip(), request.voice, request.translate_to_voice_language
+    )
 
     try:
         await generate_audio(
-            text=request.text.strip(),
+            text=spoken_text,
             output_file=str(output_path),
             voice=request.voice
         )
@@ -1217,7 +1244,9 @@ async def generate_audio_endpoint(request: AudioRequest):
         filename=filename,
         audio_path=str(output_path),
         download_url=f"/audio/{filename}",
-        voice=request.voice
+        voice=request.voice,
+        spoken_text=spoken_text,
+        translated=translated,
     )
 
 
@@ -1233,10 +1262,13 @@ async def generate_video_audio_endpoint(request: VideoAudioRequest):
 
     filename = f"video_script_{uuid.uuid4().hex[:8]}.mp3"
     output_path = AUDIO_DIR / filename
+    spoken_text, translated = _prepare_spoken_text(
+        narration_text, request.voice, request.translate_to_voice_language
+    )
 
     try:
         await generate_audio(
-            text=narration_text,
+            text=spoken_text,
             output_file=str(output_path),
             voice=request.voice
         )
@@ -1251,7 +1283,9 @@ async def generate_video_audio_endpoint(request: VideoAudioRequest):
         filename=filename,
         audio_path=str(output_path),
         download_url=f"/audio/{filename}",
-        voice=request.voice
+        voice=request.voice,
+        spoken_text=spoken_text,
+        translated=translated,
     )
 
 
@@ -1335,7 +1369,7 @@ def _audience_reframing_leaked(text: str) -> bool:
     return sum(marker in lowered for marker in markers) >= 2
 
 
-def _audience_reframing_fallback(audience: str, source: str, brand_voice: BrandVoiceProfile) -> str:
+def _audience_reframing_fallback(audience: str, source: str, brand_voice: Optional[BrandVoiceProfile]) -> str:
     """Return a clean, fact-preserving audience version when generation leaks planning text."""
     label = audience.lower()
     if "ceo" in label or "exec" in label:
@@ -1360,7 +1394,13 @@ def _audience_reframing_fallback(audience: str, source: str, brand_voice: BrandV
         heading = "PLAIN-LANGUAGE OVERVIEW"
         focus = "In simple terms: QuantumSecure updates encryption and improves secure-system performance."
 
-    disclaimer = f"\n\n{brand_voice.disclaimer}" if brand_voice.disclaimer else ""
+    disclaimer_text = ""
+    if brand_voice and getattr(brand_voice, "disclaimer", None):
+        disclaimer_text = brand_voice.disclaimer
+    elif isinstance(brand_voice, dict):
+        disclaimer_text = brand_voice.get("disclaimer", "")
+
+    disclaimer = f"\n\n{disclaimer_text}" if disclaimer_text else ""
     return f"{heading}\n\n{focus}\n\nSource-grounded details:\n{source}{disclaimer}"
 
 

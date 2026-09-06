@@ -83,11 +83,13 @@ class FileTextResponse(TextResponse):
 class AudioRequest(BaseModel):
     text: str
     voice: str = "en-US-AriaNeural"
+    translate_to_voice_language: bool = True
 
 
 class VideoAudioRequest(BaseModel):
     video_script: Union[Dict[str, Any], str]
     voice: str = "en-US-AriaNeural"
+    translate_to_voice_language: bool = True
 
 
 class AudioResponse(BaseModel):
@@ -96,3 +98,5 @@ class AudioResponse(BaseModel):
     audio_path: str
     download_url: str
     voice: str
+    spoken_text: str
+    translated: bool = False

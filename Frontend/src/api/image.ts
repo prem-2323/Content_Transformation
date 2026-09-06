@@ -2,14 +2,28 @@ import { apiClient, getApiBaseUrl } from './client';
 
 export interface GenerateImageRequest {
   prompt: string;
+  mode?: 'fast' | 'balanced' | 'quality' | string;
   width?: number;
   height?: number;
   steps?: number;
+  negative_prompt?: string;
   [key: string]: any;
 }
 
+export interface GenerateImageResponse {
+  status: string;
+  filename: string;
+  image_path: string;
+  image_url?: string;
+  generation_time: number;
+  device: string;
+  steps: number;
+  width: number;
+  height: number;
+}
+
 export const imageApi = {
-  generateImage: async (data: GenerateImageRequest) => {
+  generateImage: async (data: GenerateImageRequest): Promise<GenerateImageResponse> => {
     const res = await apiClient.post('/generate-image', data);
     return res.data;
   },

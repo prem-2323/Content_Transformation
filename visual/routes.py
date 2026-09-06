@@ -44,17 +44,21 @@ async def analyze_image(
         pil_image = load_image(image_bytes)
 
         # 4. Process image with Gemma
-        result = await gemma.analyze_image(
+        res = await gemma.analyze_image(
             pil_image,
             prompt,
             task_str
         )
 
-        # 5. Return structured response
+        # 5. Return structured response conforming to Visual AI Extraction Rules
         return VisualResponse(
+            success=res.get("success", True),
+            task=task_str,
+            result=res.get("result", res),
+            evidence=res.get("evidence", []),
+            warnings=res.get("warnings", []),
             status="success",
-            message="Image analyzed successfully.",
-            result=result
+            message="Image analyzed successfully."
         )
 
     except ValueError as e:

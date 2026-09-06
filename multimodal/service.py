@@ -52,7 +52,7 @@ async def _analyze_image_with_limit(idx: int, img: Image.Image) -> Dict[str, Any
         try:
             analysis = await gemma_model.analyze_image(
                 image=img,
-                prompt=f"Analyze page image {idx} for text, objects, and summary details.",
+                prompt="Analyze image for text, objects, and summary details.",
                 task="summary"
             )
             logger.info("[Gemma] Completed image analysis: %d", idx)

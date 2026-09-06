@@ -193,7 +193,7 @@ def test_consistency_validator_overall_score_breakdown(sample_uckr):
     }
 
     report = ConsistencyValidator.validate_all(sample_uckr, outputs, fact_matrix)
-    assert report.overall_score >= 70.0
+    assert report.overall_score >= 80.0
     assert report.breakdown.numeric_consistency == 100.0
     assert report.breakdown.entity_consistency >= 60.0
     assert "summary" in report.channel_scores

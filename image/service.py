@@ -2,7 +2,7 @@ import os
 import uuid
 from io import BytesIO
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 from PIL import Image
 
@@ -31,13 +31,22 @@ def save_image(image_bytes: bytes, prefix: str = "image") -> str:
 def generate_and_save_image(
     prompt: str,
     negative_prompt: str,
-    width: int,
-    height: int,
-    steps: int,
+    width: int = 768,
+    height: int = 768,
+    steps: int = 10,
+    mode: str = "fast",
     prefix: str = "image",
-) -> str:
-    image_bytes = generate_image_bytes(prompt, negative_prompt, width, height, steps)
-    return save_image(image_bytes, prefix)
+) -> Tuple[str, float, str]:
+    image_bytes, generation_time, device = generate_image_bytes(
+        prompt=prompt,
+        negative_prompt=negative_prompt,
+        width=width,
+        height=height,
+        steps=steps,
+        mode=mode,
+    )
+    filename = save_image(image_bytes, prefix)
+    return filename, generation_time, device
 
 
 def image_path(filename: str) -> Optional[Path]:

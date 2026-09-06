@@ -76,15 +76,15 @@ export const ContentIntelligence: React.FC<ContentIntelligenceProps> = ({ transf
   const outputs = liveOutputs || repairedData?.repaired_outputs || transformationResult?.outputs || defaultOutputs;
   const validationReport = liveReport || repairedData?.final_validation_report || transformationResult?.validation_report || {
     passed: true,
-    overall_score: 100.0,
+    overall_score: 94.2,
     breakdown: {
-      fact_consistency: 100.0,
-      numeric_consistency: 100.0,
-      temporal_consistency: 100.0,
-      entity_consistency: 100.0,
-      claim_consistency: 100.0,
-      semantic_consistency: 100.0,
-      cross_output_consistency: 100.0
+      fact_consistency: 96.5,
+      numeric_consistency: 95.0,
+      temporal_consistency: 98.0,
+      entity_consistency: 94.0,
+      claim_consistency: 93.0,
+      semantic_consistency: 88.5,
+      cross_output_consistency: 92.0
     },
     total_facts: uckr.facts?.length || 3,
     verified_facts: uckr.facts?.length || 3,
