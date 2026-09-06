@@ -1,4 +1,4 @@
-# Python
+# Python caches and build artifacts
 __pycache__/
 *.py[cod]
 *$py.class
@@ -21,21 +21,46 @@ share/python-wheels/
 .installed.cfg
 *.egg
 
-# Virtual environments
+# Python virtual environments
 .venv/
 venv/
 env/
 ENV/
+
+# Environment files and local secrets
 .env
 .env.*
 !.env.example
 
-# Test and tooling caches
+# Test, coverage, and tooling caches
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .coverage
+*.coverage
 htmlcov/
+.tox/
+.nox/
+.hypothesis/
+
+# Frontend dependencies and build output
+node_modules/
+frontend/node_modules/
+Frontend/node_modules/
+Frontend/dist/
+Frontend/build/
+Frontend/coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*.bak
 
 # Local IDE and operating-system files
 .vscode/
@@ -44,7 +69,13 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Local model and generated media files
+# Runtime logs and local databases
+*.log
+*.sqlite
+*.sqlite3
+*.db
+
+# Local models, uploads, and generated media
 models/
 ollama/
 *.gguf
@@ -55,12 +86,8 @@ outputs/
 generated/
 generated_audio/
 generated_images/
+generated_videos/
 stable-diffusion-webui-forge/
-stable-diffusion-webui-forge
-# Runtime logs and local databases
-*.log
-*.sqlite
-*.sqlite3
 
 # Generated test artifacts
 sample_test/report/

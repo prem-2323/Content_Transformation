@@ -1,23 +1,23 @@
 1
-00:00:00,000 --> 00:00:07,460
-Humanity's journey into space has begun to unlock unprecedented scientific and technological potential.
+00:00:00,000 --> 00:00:05,200
+Explain quantum computing and enterprise AI transformation
 
 2
-00:00:07,460 --> 00:00:13,550
-Advanced telescopes now capture cosmic phenomena invisible to the naked eye.
+00:00:05,200 --> 00:00:10,400
+Explain quantum computing and enterprise AI transformation
 
 3
-00:00:13,550 --> 00:00:20,340
-New materials developed in microgravity environments are revolutionizing industries on Earth.
+00:00:10,400 --> 00:00:15,600
+Explain quantum computing and enterprise AI transformation
 
 4
-00:00:20,340 --> 00:00:26,720
-Space missions are creating global collaboration opportunities for scientific discovery.
+00:00:15,600 --> 00:00:20,800
+Explain quantum computing and enterprise AI transformation
 
 5
-00:00:26,720 --> 00:00:32,790
-The Artemis program aims to establish a sustainable lunar presence by 2030.
+00:00:20,800 --> 00:00:26,000
+Explain quantum computing and enterprise AI transformation
 
 6
-00:00:32,790 --> 00:00:38,640
-Space exploration is a catalyst for innovation that benefits all of humanity.
+00:00:26,000 --> 00:00:31,200
+Explain quantum computing and enterprise AI transformation

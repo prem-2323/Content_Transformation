@@ -7,19 +7,25 @@ export const VideoStudio: React.FC = () => {
   const { isDarkMode } = useTheme();
   const [script, setScript] = useState('Quantum computing overview video script with narration and subtitles.');
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [meta, setMeta] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError(null);
+    setVideoUrl(null);
     try {
-      const res = await videoApi.generateVideo({ script });
-      if (res.filename) {
-        setVideoUrl(videoApi.getVideoUrl(res.filename));
-      } else if (res.url) {
-        setVideoUrl(res.url);
+      // Backend POST /video/generate-video expects { text, ... }, not { script }
+      const res = await videoApi.generateVideo({ text: script });
+      setMeta(res);
+      const filePath = (res as any).video_file ?? (res as any).filename ?? (res as any).url ?? '';
+      if (filePath) {
+        setVideoUrl(videoApi.getVideoUrl(filePath));
       }
     } catch (e: any) {
+      setError(e.message);
       console.error(e);
     } finally {
       setIsLoading(false);
@@ -51,6 +57,10 @@ export const VideoStudio: React.FC = () => {
             />
           </div>
 
+          {error && (
+            <p className="text-xs text-red-500 border border-red-500/30 bg-red-500/10 rounded-lg px-3 py-2">{error}</p>
+          )}
+
           <button
             type="submit"
             disabled={isLoading}
@@ -67,6 +77,11 @@ export const VideoStudio: React.FC = () => {
           {videoUrl ? (
             <div className="space-y-4 text-center w-full">
               <video controls src={videoUrl} className="w-full max-h-72 rounded-xl shadow-lg bg-black" />
+              {meta && (
+                <p className={`text-[11px] ${isDarkMode ? 'text-[#b3b3b3]' : 'text-slate-500'}`}>
+                  {meta.scenes} scenes • {meta.duration}s • {String(meta.video_file).split(/[\\/]/).pop()}
+                </p>
+              )}
               <a
                 href={videoUrl}
                 download="composed-video.mp4"
