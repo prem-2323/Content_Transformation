@@ -89,14 +89,12 @@ export const MultimodalPdfStudio: React.FC<{ onCompleteResult: (res: any) => voi
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* Upload Form */}
-        <form onSubmit={handleSubmit} className={`rounded-2xl border p-6 shadow-xl space-y-6 ${
-          isDarkMode ? 'bg-[#181818] border-[#282828]' : 'bg-white border-slate-200'
-        }`}>
+        <form onSubmit={handleSubmit} className={`rounded-2xl border p-6 shadow-xl space-y-6 ${isDarkMode ? 'bg-[#181818] border-[#282828]' : 'bg-white border-slate-200'
+          }`}>
           <div className="space-y-3">
             <label className={`text-[10px] font-bold uppercase tracking-widest ${isDarkMode ? 'text-[#b3b3b3]' : 'text-slate-500'}`}>Select PDF Document</label>
-            <div className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all ${
-              isDarkMode ? 'border-white/20 bg-[#121212]' : 'border-slate-300 bg-slate-50'
-            }`}>
+            <div className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all ${isDarkMode ? 'border-white/20 bg-[#121212]' : 'border-slate-300 bg-slate-50'
+              }`}>
               <input
                 type="file"
                 accept=".pdf"
@@ -151,9 +149,8 @@ export const MultimodalPdfStudio: React.FC<{ onCompleteResult: (res: any) => voi
         </form>
 
         {/* Live Status & Pipeline Progress */}
-        <div className={`rounded-2xl border p-6 shadow-xl space-y-6 flex flex-col justify-between ${
-          isDarkMode ? 'bg-[#181818] border-[#282828]' : 'bg-white border-slate-200'
-        }`}>
+        <div className={`rounded-2xl border p-6 shadow-xl space-y-6 flex flex-col justify-between ${isDarkMode ? 'bg-[#181818] border-[#282828]' : 'bg-white border-slate-200'
+          }`}>
           <div>
             <h3 className="font-bold text-sm mb-4">Pipeline Execution Status</h3>
             {jobId ? (
@@ -169,9 +166,8 @@ export const MultimodalPdfStudio: React.FC<{ onCompleteResult: (res: any) => voi
                     const isPassed = jobStatus?.step === stepName || idx < 3;
                     return (
                       <div key={idx} className="flex items-center space-x-3 text-xs">
-                        <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                          isPassed ? 'bg-[#1ed760] text-black' : isDarkMode ? 'bg-white/10 text-slate-400' : 'bg-slate-200 text-slate-600'
-                        }`}>
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${isPassed ? 'bg-[#1ed760] text-black' : isDarkMode ? 'bg-white/10 text-slate-400' : 'bg-slate-200 text-slate-600'
+                          }`}>
                           {idx + 1}
                         </div>
                         <span className={isPassed ? (isDarkMode ? 'text-white font-semibold' : 'text-slate-900 font-semibold') : 'text-slate-500'}>{stepName}</span>

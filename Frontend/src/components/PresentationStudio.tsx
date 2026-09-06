@@ -16,12 +16,18 @@ export const PresentationStudio: React.FC = () => {
   const handleExport = async () => {
     setIsLoading(true);
     try {
-      const res = await presentationApi.exportPptx({ title, slides });
-      if (res.url || res.filename) {
-        alert('Presentation exported successfully!');
-      }
+      const { blob, filename } = await presentationApi.exportPptx({ title, slides });
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(downloadUrl);
     } catch (e: any) {
       console.error(e);
+      alert(e?.message || 'Unable to export the presentation.');
     } finally {
       setIsLoading(false);
     }
