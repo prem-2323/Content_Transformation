@@ -64,6 +64,27 @@ TASK RULES:
 4. If the user asks for a SUMMARY:
     - Summarize only clearly visible information.
 
+6. If the user asks for a CAPTION (detailed caption):
+    - Write a rich 2-3 sentence caption describing the main subject,
+      setting, and key visible action.
+    - Do not infer beyond what is visible.
+
+7. If the user asks for QA (visual Q&A):
+    - Answer ONLY the user's specific question in User prompt
+      using clearly visible evidence.
+    - If the answer is not visible, respond exactly:
+      Not visible in the image.
+
+8. If the user asks for CHART / document parse:
+    - Extract readable titles, labels, legends, axis labels, table cells,
+      and values into visible_text.
+    - Treat bars, lines, points, and tables as objects.
+    - Summarize the chart trend in description.
+
+9. If the user asks for SCENE + sentiment:
+    - Identify scene type, setting, mood, lighting, and dominant colors.
+    - Put mood and atmosphere into important_details.
+
 5. If the image contains a chart, diagram, document, screenshot, or poster:
     - Treat readable titles, labels, legends, axis labels, and values as visible text.
     - Treat chart bars, lines, points, tables, and other meaningful visual elements as objects.

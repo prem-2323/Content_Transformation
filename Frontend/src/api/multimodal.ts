@@ -3,7 +3,7 @@ import { apiClient } from './client';
 export const multimodalApi = {
   transformPdf: async (formData: FormData) => {
     const res = await apiClient.post('/multimodal/transform-pdf', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 600000,
     });
     return res.data; // Expected { job_id: string, status: string }
   },

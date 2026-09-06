@@ -8,6 +8,10 @@ class VisualTask(str, Enum):
     ocr = "ocr"
     objects = "objects"
     summary = "summary"
+    caption = "caption"
+    qa = "qa"
+    chart = "chart"
+    scene = "scene"
 
 
 class VisualAnalysis(BaseModel):

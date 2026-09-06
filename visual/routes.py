@@ -17,16 +17,16 @@ SUPPORTED_TASKS = {task.value for task in VisualTask}
 async def analyze_image(
     image: UploadFile = File(..., description="Uploaded image file (JPG, JPEG, PNG)"),
     prompt: str = Form("Analyze this image", description="Prompt or query for image analysis"),
-    task: VisualTask = Form(VisualTask.description, description="Analysis task (description, ocr, objects, summary)")
+    task: VisualTask = Form(VisualTask.description, description="Analysis task (description, ocr, objects, summary, caption, qa, chart, scene)")
 ):
-    """Analyze image using Gemma 3 4B (OCR, Object detection, Scene description, Summary)."""
+    """Analyze image using Gemma 3 4B (OCR, Object detection, Scene description, Summary, Caption, QA, Chart parse, Scene+sentiment)."""
     try:
         task_str = task.value
 
         if task_str not in SUPPORTED_TASKS:
             raise HTTPException(
                 status_code=400,
-                detail="Unsupported task. Choose one of: description, ocr, objects, summary."
+                detail=f"Unsupported task. Choose one of: {', '.join(sorted(SUPPORTED_TASKS))}."
             )
 
         # 1. Validate image format

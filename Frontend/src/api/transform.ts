@@ -37,7 +37,6 @@ export const transformApi = {
 
   transformFile: async (formData: FormData) => {
     const res = await apiClient.post('/transform-file', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 600000,
     });
     return res.data;

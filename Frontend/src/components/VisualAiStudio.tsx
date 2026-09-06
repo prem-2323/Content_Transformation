@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, Sparkles, Image as ImageIcon, CheckCircle2, ShieldCheck, RefreshCw } from 'lucide-react';
+import { Sparkles, Image as ImageIcon, ShieldCheck, RefreshCw } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { visualApi } from '../api/visual';
 
@@ -7,6 +7,8 @@ export const VisualAiStudio: React.FC = () => {
   const { isDarkMode } = useTheme();
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [task, setTask] = useState<'description' | 'ocr' | 'objects' | 'summary' | 'caption' | 'qa' | 'chart' | 'scene'>('description');
+  const [prompt, setPrompt] = useState('Analyze this image');
   const [analysisResult, setAnalysisResult] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,10 +27,10 @@ export const VisualAiStudio: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await visualApi.analyzeImage(formData);
-      setAnalysisResult(res);
+      // Backend expects: image (File), task, prompt — see visual/routes.py
+      const res = await visualApi.analyzeImage(file, task, prompt);
+      // Backend returns { status, message, result: { description, objects, visible_text, important_details } }
+      setAnalysisResult(res?.result ?? res);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -66,6 +68,39 @@ export const VisualAiStudio: React.FC = () => {
             </label>
           </div>
 
+          <div className="grid grid-cols-2 gap-3">
+            <label className="text-xs space-y-1 block">
+              <span className="font-bold uppercase text-[10px] opacity-70">Task</span>
+              <select
+                value={task}
+                onChange={(e) => setTask(e.target.value as any)}
+                className="w-full rounded-lg border px-2 py-2 text-xs bg-transparent"
+              >
+                <option value="description">description</option>
+                <option value="ocr">ocr</option>
+                <option value="objects">objects</option>
+                <option value="summary">summary</option>
+                <option value="caption">caption - detailed caption</option>
+                <option value="qa">qa - visual Q&A</option>
+                <option value="chart">chart - chart/document parse</option>
+                <option value="scene">scene - scene + sentiment</option>
+              </select>
+            </label>
+            <label className="text-xs space-y-1 block col-span-2">
+              <span className="font-bold uppercase text-[10px] opacity-70">Prompt (optional)</span>
+              <input
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Analyze this image"
+                className="w-full rounded-lg border px-2 py-2 text-xs bg-transparent"
+              />
+            </label>
+          </div>
+
+          {error && (
+            <p className="text-xs text-red-500 border border-red-500/30 bg-red-500/10 rounded-lg px-3 py-2">{error}</p>
+          )}
+
           <button
             onClick={handleAnalyze}
             disabled={!file || isLoading}
@@ -81,28 +116,42 @@ export const VisualAiStudio: React.FC = () => {
           isDarkMode ? 'bg-[#181818] border-[#282828]' : 'bg-white border-slate-200'
         }`}>
           <h3 className="font-bold text-sm">Visual Analysis Result</h3>
+          {error && !analysisResult && (
+            <p className="text-xs text-red-500">{error}</p>
+          )}
           {analysisResult ? (
             <div className="space-y-4 text-xs">
-              <div className="p-3 rounded-xl bg-[#121212] border border-white/10 space-y-1">
+              <div className={`p-3 rounded-xl border space-y-1 ${isDarkMode ? 'bg-[#121212] border-white/10 text-gray-100' : 'bg-slate-900 border-slate-900 text-slate-100'}`}>
                 <span className="text-[10px] font-bold text-[#1ed760] uppercase">Visual Description</span>
-                <p className="leading-relaxed">{analysisResult.description || analysisResult.summary || JSON.stringify(analysisResult)}</p>
+                <p className="leading-relaxed text-slate-100">{analysisResult.description || analysisResult.summary || JSON.stringify(analysisResult)}</p>
               </div>
 
-              {analysisResult.objects && (
-                <div className="p-3 rounded-xl bg-[#121212] border border-white/10 space-y-1">
+              {Array.isArray(analysisResult.objects) && analysisResult.objects.length > 0 && (
+                <div className={`p-3 rounded-xl border space-y-1 ${isDarkMode ? 'bg-[#121212] border-white/10 text-gray-100' : 'bg-slate-900 border-slate-900 text-slate-100'}`}>
                   <span className="text-[10px] font-bold text-[#1ed760] uppercase">Detected Objects</span>
                   <div className="flex flex-wrap gap-1.5 mt-1">
-                    {Array.isArray(analysisResult.objects) && analysisResult.objects.map((obj: string, i: number) => (
-                      <span key={i} className="px-2 py-0.5 rounded bg-white/10 text-[11px]">{obj}</span>
+                    {analysisResult.objects.map((obj: string, i: number) => (
+                      <span key={i} className="px-2 py-0.5 rounded bg-white/15 text-white text-[11px]">{obj}</span>
                     ))}
                   </div>
                 </div>
               )}
 
-              {analysisResult.ocr_text && (
-                <div className="p-3 rounded-xl bg-[#121212] border border-white/10 space-y-1">
+              {Array.isArray(analysisResult.visible_text) && analysisResult.visible_text.length > 0 && (
+                <div className={`p-3 rounded-xl border space-y-1 ${isDarkMode ? 'bg-[#121212] border-white/10 text-gray-100' : 'bg-slate-900 border-slate-900 text-slate-100'}`}>
                   <span className="text-[10px] font-bold text-[#1ed760] uppercase">OCR / Extracted Text</span>
-                  <p className="font-mono text-[11px]">{analysisResult.ocr_text}</p>
+                  <p className="font-mono text-[11px] text-slate-100 whitespace-pre-wrap">{analysisResult.visible_text.join('\n')}</p>
+                </div>
+              )}
+
+              {Array.isArray(analysisResult.important_details) && analysisResult.important_details.length > 0 && (
+                <div className={`p-3 rounded-xl border space-y-1 ${isDarkMode ? 'bg-[#121212] border-white/10 text-gray-100' : 'bg-slate-900 border-slate-900 text-slate-100'}`}>
+                  <span className="text-[10px] font-bold text-[#1ed760] uppercase">Important Details</span>
+                  <ul className="list-disc ml-4 space-y-1 text-slate-100">
+                    {analysisResult.important_details.map((d: string, i: number) => (
+                      <li key={i}>{d}</li>
+                    ))}
+                  </ul>
                 </div>
               )}
             </div>

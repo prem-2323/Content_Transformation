@@ -17,9 +17,10 @@ export const getApiBaseUrl = () => customBaseUrl;
 
 export const apiClient = axios.create({
   baseURL: customBaseUrl,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  // NOTE: do NOT set a global Content-Type here.
+  // Axios auto-sets application/json for plain objects.
+  // A global application/json breaks FormData uploads (FastAPI then sees
+  // missing fields -> 422 "body.image: Field required").
   timeout: 45000,
 });
 

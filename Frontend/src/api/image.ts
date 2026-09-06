@@ -21,7 +21,7 @@ export const imageApi = {
 
   generateSceneImagesFromFile: async (formData: FormData) => {
     const res = await apiClient.post('/generate-scene-images-from-file', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 600000,
     });
     return res.data;
   },
