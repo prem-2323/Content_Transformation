@@ -8,22 +8,12 @@ import { ContentIntelligence } from './components/ContentIntelligence';
 import { HistoryWorkspace } from './components/HistoryWorkspace';
 import { GeneralChatbot } from './components/GeneralChatbot';
 import { ApiExplorer } from './components/ApiExplorer';
-import { GoogleKeepWorkspace } from './components/GoogleKeepWorkspace';
-import { GoogleDriveWorkspace } from './components/GoogleDriveWorkspace';
 import { MultimodalPdfStudio } from './components/MultimodalPdfStudio';
-import { VisualAiStudio } from './components/VisualAiStudio';
-import { ImageStudio } from './components/ImageStudio';
-import { SceneGenerator } from './components/SceneGenerator';
-import { VideoPlanner } from './components/VideoPlanner';
-import { VideoStudio } from './components/VideoStudio';
-import { AudioStudio } from './components/AudioStudio';
+import { VisualStudioWrapper } from './components/VisualStudioWrapper';
+import { VideoStudioWrapper } from './components/VideoStudioWrapper';
+import { QualityValidationWrapper } from './components/QualityValidationWrapper';
+import { OutputControlsWrapper } from './components/OutputControlsWrapper';
 import { PresentationStudio } from './components/PresentationStudio';
-import { TranslationStudio } from './components/TranslationStudio';
-import { FactRegistry } from './components/FactRegistry';
-import { ConsistencyPipeline } from './components/ConsistencyPipeline';
-import { QualityScoreDashboard } from './components/QualityScoreDashboard';
-import { AudienceReframer } from './components/AudienceReframer';
-import { BrandVoiceStudio } from './components/BrandVoiceStudio';
 import { BottomNavbar } from './components/BottomNavbar';
 import { OpenApiModal } from './components/OpenApiModal';
 import { HomePage } from './components/HomePage';
@@ -150,13 +140,6 @@ export default function App() {
     setActiveTab('results');
   };
 
-  const handleSendToTransformFromKeep = (text: string) => {
-    // Prefill the Transform tab — TransformationForm only reads initialSourceText on mount,
-    // so store it and remount via key below.
-    if (text) setKeepInitialText(text);
-    setActiveTab('transform');
-  };
-
   return (
     <div className={`h-screen ${isDarkMode ? 'dark bg-[#121212] text-[#b3b3b3]' : 'bg-slate-50 text-slate-800'} flex flex-col font-sans selection:bg-[#1ed760] selection:text-black relative overflow-hidden transition-colors duration-300`}>
       {/* 1. AI Background: Subtle Animated Gradient & Dot Grid & Floating Moving/Stable Bubbles */}
@@ -277,67 +260,37 @@ export default function App() {
                 />
               )}
 
-              {activeTab === 'visual' && (
-                <VisualAiStudio />
+              {(activeTab === 'visual_studio' || activeTab === 'visual' || activeTab === 'image') && (
+                <VisualStudioWrapper initialSubTab={activeTab === 'image' ? 'image' : 'visual'} />
               )}
 
-              {activeTab === 'image' && (
-                <ImageStudio />
-              )}
-
-              {activeTab === 'scene' && (
-                <SceneGenerator />
-              )}
-
-              {activeTab === 'video_plan' && (
-                <VideoPlanner />
-              )}
-
-              {activeTab === 'video' && (
-                <VideoStudio />
-              )}
-
-              {activeTab === 'audio' && (
-                <AudioStudio />
+              {(activeTab === 'video_studio' || activeTab === 'scene' || activeTab === 'video_plan' || activeTab === 'video' || activeTab === 'audio') && (
+                <VideoStudioWrapper initialSubTab={
+                  activeTab === 'video_plan' ? 'video_plan' :
+                  activeTab === 'video' ? 'video' :
+                  activeTab === 'audio' ? 'audio' : 'scene'
+                } />
               )}
 
               {activeTab === 'presentation' && (
                 <PresentationStudio />
               )}
 
-              {activeTab === 'translation' && (
-                <TranslationStudio />
+              {(activeTab === 'output_controls' || activeTab === 'audience' || activeTab === 'brand_voice' || activeTab === 'translation') && (
+                <OutputControlsWrapper initialSubTab={
+                  activeTab === 'brand_voice' ? 'brand_voice' :
+                  activeTab === 'translation' ? 'translation' : 'audience'
+                } />
               )}
 
-              {activeTab === 'audience' && (
-                <AudienceReframer />
-              )}
-
-              {activeTab === 'brand_voice' && (
-                <BrandVoiceStudio />
-              )}
-
-              {activeTab === 'registry' && (
-                <FactRegistry />
-              )}
-
-              {activeTab === 'pipeline' && (
-                <ConsistencyPipeline />
-              )}
-
-              {activeTab === 'quality' && (
-                <QualityScoreDashboard />
-              )}
-
-              {activeTab === 'keep' && (
-                <GoogleKeepWorkspace
-                  onSendToTransform={handleSendToTransformFromKeep}
-                />
-              )}
-
-              {activeTab === 'gdrive' && (
-                <GoogleDriveWorkspace
-                  onSendToTransform={handleSendToTransformFromKeep}
+              {(activeTab === 'quality_validation' || activeTab === 'registry' || activeTab === 'pipeline' || activeTab === 'quality' || activeTab === 'intelligence') && (
+                <QualityValidationWrapper
+                  transformationResult={transformationResult}
+                  initialSubTab={
+                    activeTab === 'pipeline' ? 'pipeline' :
+                    activeTab === 'quality' ? 'quality' :
+                    activeTab === 'intelligence' ? 'intelligence' : 'registry'
+                  }
                 />
               )}
 

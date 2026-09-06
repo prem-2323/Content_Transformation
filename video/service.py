@@ -78,7 +78,7 @@ def generate_scene_image(
     filename = f"scene_{index:02d}.png"
     output_path = IMAGES_DIR / filename
 
-    image_bytes = generate_image_bytes(
+    raw_res = generate_image_bytes(
         prompt=prompt,
         negative_prompt=negative_prompt,
         width=width,
@@ -87,6 +87,7 @@ def generate_scene_image(
         cfg_scale=cfg_scale,
         sampler_name=sampler_name,
     )
+    image_bytes = raw_res[0] if isinstance(raw_res, tuple) else raw_res
 
     # Validate + normalise to RGB PNG
     with Image.open(BytesIO(image_bytes)) as img:

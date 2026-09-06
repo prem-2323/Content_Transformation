@@ -51,12 +51,18 @@ def _fallback_scenes(script: Union[Dict[str, Any], str]) -> List[Dict[str, Any]]
 
 
 def generate_scene_prompts(script: Union[Dict[str, Any], str]) -> List[Dict[str, Any]]:
-    source = json.dumps(script, ensure_ascii=True) if isinstance(script, dict) else script
-    response = generate_with_qwen(PROMPT_ENGINE_INSTRUCTIONS + source[:12000])
-    scenes = _parse_json(response).get("scenes", [])
-    valid_scenes = [
-        {"scene": item.get("scene", index), "prompt": str(item.get("prompt", "")).strip()}
-        for index, item in enumerate(scenes, 1)
-        if isinstance(item, dict) and str(item.get("prompt", "")).strip()
-    ]
-    return valid_scenes or _fallback_scenes(script)
+    try:
+        source = json.dumps(script, ensure_ascii=True) if isinstance(script, dict) else script
+        response = generate_with_qwen(PROMPT_ENGINE_INSTRUCTIONS + source[:12000])
+        scenes = _parse_json(response).get("scenes", [])
+        valid_scenes = [
+            {"scene": item.get("scene", index), "prompt": str(item.get("prompt", "")).strip()}
+            for index, item in enumerate(scenes, 1)
+            if isinstance(item, dict) and str(item.get("prompt", "")).strip()
+        ]
+        if valid_scenes:
+            return valid_scenes
+    except Exception as err:
+        print(f"[Prompt Engine Fallback] Qwen prompt engineering offline/failed ({err}). Using fallback storyboard scenes.")
+
+    return _fallback_scenes(script)

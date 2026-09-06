@@ -18,47 +18,31 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
 
   const groups = [
     {
-      title: 'TRANSFORM',
+      title: 'CORE TRANSFORM',
       items: [
         { id: 'transform', label: 'Transform Engine', faIcon: 'fa-solid fa-wand-magic-sparkles' },
         { id: 'results', label: 'Results Workspace', faIcon: 'fa-solid fa-file-lines' },
-        { id: 'audience', label: 'Audience Reframing', faIcon: 'fa-solid fa-users' },
-      ]
-    },
-    {
-      title: 'CREATION',
-      items: [
         { id: 'multimodal', label: 'PDF Studio', faIcon: 'fa-solid fa-file-pdf' },
-        { id: 'visual', label: 'Visual AI', faIcon: 'fa-solid fa-eye' },
-        { id: 'image', label: 'Image Studio', faIcon: 'fa-solid fa-image' },
-        { id: 'scene', label: 'Scene Generator', faIcon: 'fa-solid fa-film' },
-        { id: 'video_plan', label: 'Video Planner', faIcon: 'fa-solid fa-video' },
-        { id: 'video', label: 'Video Studio', faIcon: 'fa-solid fa-clapperboard' },
-        { id: 'audio', label: 'Audio Studio', faIcon: 'fa-solid fa-volume-high' },
       ]
     },
     {
-      title: 'OUTPUTS & BRAND',
+      title: 'CREATION STUDIOS',
       items: [
-        { id: 'presentation', label: 'Presentation', faIcon: 'fa-solid fa-file-powerpoint' },
-        { id: 'translation', label: 'Translation', faIcon: 'fa-solid fa-language' },
-        { id: 'brand_voice', label: 'Brand Voice', faIcon: 'fa-solid fa-sliders' },
+        { id: 'visual_studio', label: 'Visual Studio', faIcon: 'fa-solid fa-[#1ed760] fa-eye' },
+        { id: 'video_studio', label: 'Video Studio', faIcon: 'fa-solid fa-[#1ed760] fa-clapperboard' },
+        { id: 'presentation', label: 'Presentation Studio', faIcon: 'fa-solid fa-file-powerpoint' },
       ]
     },
     {
-      title: 'QUALITY',
+      title: 'GOVERNANCE & CONTROLS',
       items: [
-        { id: 'registry', label: 'Fact Registry', faIcon: 'fa-solid fa-shield-halved' },
-        { id: 'pipeline', label: 'Consistency', faIcon: 'fa-solid fa-layer-group' },
-        { id: 'quality', label: 'Quality Score', faIcon: 'fa-solid fa-award' },
-        { id: 'intelligence', label: 'Intelligence', faIcon: 'fa-solid fa-brain' },
+        { id: 'output_controls', label: 'Output Controls', faIcon: 'fa-solid fa-sliders' },
+        { id: 'quality_validation', label: 'Quality & Validation', faIcon: 'fa-solid fa-shield-halved' },
       ]
     },
     {
-      title: 'MORE',
+      title: 'TOOLS & EXTENSIONS',
       items: [
-        { id: 'gdrive', label: 'Google Drive', faIcon: 'fa-brands fa-google-drive' },
-        { id: 'keep', label: 'Keep Notes', faIcon: 'fa-solid fa-note-sticky' },
         { id: 'chatbot', label: 'AI Assistant', faIcon: 'fa-solid fa-robot' },
         { id: 'history', label: 'History', faIcon: 'fa-solid fa-clock-rotate-left' },
         { id: 'api', label: 'API Explorer', faIcon: 'fa-solid fa-terminal' },

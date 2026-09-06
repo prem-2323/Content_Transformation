@@ -1,23 +1,23 @@
 1
-00:00:00,000 --> 00:00:10,990
-Our solution, Gen AI Content Transformation, addresses the difficulty of converting large and complex content into useful, easy-to-understand formats
+00:00:00,000 --> 00:00:03,520
+QuantumSecure platform v3
 
 2
-00:00:10,990 --> 00:00:25,480
-The platform uses Generative AI to analyze a single source such as a PDF or text and transform it into summaries, simplified explanations, Q&A, presentations, scripts, and multilingual content
+00:00:03,520 --> 00:00:07,670
+4 delivers 38% lower latency
 
 3
-00:00:25,480 --> 00:00:37,550
-Unlike separate AI tools for each task, our system provides a unified transformation engine where users can choose the format, detail level, language, and target audience
+00:00:07,670 --> 00:00:11,190
+QuantumSecure platform v3
 
 4
-00:00:37,550 --> 00:00:47,580
-This reduces manual effort, saves time, and makes information more accessible for students, educators, professionals, and organizations
+00:00:11,190 --> 00:00:15,340
+4 delivers 38% lower latency
 
 5
-00:00:47,580 --> 00:00:58,570
-Our solution, Gen AI Content Transformation, addresses the difficulty of converting large and complex content into useful, easy-to-understand formats
+00:00:15,340 --> 00:00:18,860
+QuantumSecure platform v3
 
 6
-00:00:58,570 --> 00:01:13,060
-The platform uses Generative AI to analyze a single source such as a PDF or text and transform it into summaries, simplified explanations, Q&A, presentations, scripts, and multilingual content
+00:00:18,860 --> 00:00:23,010
+4 delivers 38% lower latency

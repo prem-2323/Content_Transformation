@@ -30,31 +30,17 @@ RECOMMENDED_VOICES = {
 DEFAULT_VOICE = "en-US-AriaNeural"
 
 
+from text.tts import generate_audio as text_generate_audio
+
+
 async def generate_narration(
     text: str,
     output_file: str,
     voice: str = DEFAULT_VOICE,
 ) -> str:
-    """Convert narration text to MP3 using Edge TTS.
-
-    Args:
-        text: The narration text to synthesize.
-        output_file: Absolute path for the output .mp3 file.
-        voice: Edge TTS voice name (default: en-US-AriaNeural).
-
-    Returns:
-        The output_file path on success.
-    """
+    """Convert narration text to MP3 using Edge TTS with fallback to Windows SAPI."""
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
-
-    communicate = edge_tts.Communicate(
-        text=text,
-        voice=voice,
-    )
-
-    await communicate.save(output_file)
-
-    return output_file
+    return await text_generate_audio(text=text, output_file=output_file, voice=voice)
 
 
 async def generate_scene_narrations(

@@ -184,6 +184,17 @@ Detail Level:
 {request.detail_level}
 """
 
+    if request.context.strip():
+        prompt += f"""
+
+RETRIEVED CONTEXT
+
+The following context was retrieved from the user's ContentForge workspace.
+Use it when relevant, preserve its facts, and say when it does not answer the request.
+
+{request.context[:12000]}
+"""
+
     if intent == "summarization":
 
         prompt += """
@@ -486,6 +497,15 @@ async def chat(request: ChatRequest):
         if intent == "general"
         else build_system_prompt(request, intent)
     )
+
+    if request.context.strip():
+        system_prompt += f"""
+
+Retrieved workspace context:
+{request.context[:12000]}
+
+Use this context when it is relevant. Preserve its facts and say when it does not answer the request.
+"""
 
     messages = [
         {

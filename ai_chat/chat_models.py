@@ -9,6 +9,7 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(default_factory=list)
+    context: str = ""
 
     language: str = "English"
     tone: str = "Professional"

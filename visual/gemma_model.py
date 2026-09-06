@@ -10,7 +10,7 @@ import httpx
 
 
 MAX_IMAGE_SIZE = 1024
-GEMMA_REQUEST_TIMEOUT_SECONDS = 120.0
+GEMMA_REQUEST_TIMEOUT_SECONDS = 5.0
 
 IMAGE_ANALYSIS_CACHE: dict[str, dict] = {}
 _image_cache_locks: dict[str, asyncio.Lock] = {}

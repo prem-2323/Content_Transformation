@@ -2,11 +2,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, Trash2, Loader2, MessageSquare, Plus, Mic, MicOff, Volume2, Square, Paperclip } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useTheme } from '../context/ThemeContext';
-import { apiClient } from '../api/client';
+import { retrieveWorkspaceContext, runAssistantAction, runAssistantFileAction, AssistantResult } from '../api/assistant';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  result?: AssistantResult;
 }
 
 export const GeneralChatbot: React.FC = () => {
@@ -50,15 +51,26 @@ export const GeneralChatbot: React.FC = () => {
     setIsSending(true);
 
     try {
-      // Routed through apiClient so the configured backend base URL
-      // (Settings → API URL) and offline fallback handling apply here too.
-      const res = await apiClient.post('/api/ai/chat', { messages: newMessages }, { timeout: 180000 });
-      const data = res.data;
-      const reply = data.reply || "I am here to assist with your content transformation tasks.";
-      setMessages([...newMessages, { role: 'assistant', content: reply }]);
+      const context = retrieveWorkspaceContext(textToSend);
+      const result = await runAssistantAction(newMessages, context);
+      setMessages([...newMessages, { role: 'assistant', content: result.text, result: result.action === 'chat' ? undefined : result }]);
     } catch (error: any) {
       console.error("Chat error:", error);
       setMessages([...newMessages, { role: 'assistant', content: error?.message || "Could not reach the AI backend. Make sure Ollama is running and FastAPI is started on port 8000." }]);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleFileAction = async (file: File) => {
+    if (isSending) return;
+    setMessages((current) => [...current, { role: 'user', content: `Process file: ${file.name}` }]);
+    setIsSending(true);
+    try {
+      const result = await runAssistantFileAction(file);
+      setMessages((current) => [...current, { role: 'assistant', content: result.text, result }]);
+    } catch (error: any) {
+      setMessages((current) => [...current, { role: 'assistant', content: error?.message || 'The file could not be processed.' }]);
     } finally {
       setIsSending(false);
     }
@@ -68,18 +80,10 @@ export const GeneralChatbot: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const fileContent = event.target?.result as string;
-      const snippet = fileContent ? fileContent.slice(0, 1000) : '';
-      const promptText = `[Uploaded File: ${file.name}]\nContent snippet:\n${snippet}\n\nPlease analyze and summarize this file.`;
-      handleSend(undefined, promptText);
-    };
-
     if (file.type.startsWith('image/')) {
-      handleSend(undefined, `[Uploaded Image: ${file.name}] Please analyze this image.`);
+      void handleSend(undefined, `[Uploaded Image: ${file.name}] Please analyze this image.`);
     } else {
-      reader.readAsText(file);
+      void handleFileAction(file);
     }
 
     if (fileInputRef.current) {
@@ -210,6 +214,26 @@ export const GeneralChatbot: React.FC = () => {
                   : 'bg-[#1ed760] text-black font-medium rounded-tr-none shadow-md'
               }`}>
                 <div className="whitespace-pre-wrap">{msg.content}</div>
+
+                {msg.result?.downloadUrl && (
+                  <a
+                    href={msg.result.downloadUrl}
+                    download
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`mt-3 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${isDarkMode ? 'bg-[#1ed760]/15 text-[#1ed760] hover:bg-[#1ed760]/25' : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'}`}
+                  >
+                    Download output
+                  </a>
+                )}
+
+                {msg.result?.data && msg.result.action === 'image' && (msg.result.data.image_url || msg.result.data.filename) && (
+                  <img
+                    src={msg.result.data.image_url || msg.result.downloadUrl}
+                    alt="Generated content"
+                    className="mt-3 max-h-64 rounded-lg border border-white/10 object-contain"
+                  />
+                )}
 
                 {isAssistant && (
                   <div className={`mt-2 pt-2 border-t flex items-center justify-end ${isDarkMode ? 'border-white/10' : 'border-slate-200'}`}>
