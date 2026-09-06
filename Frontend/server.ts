@@ -354,33 +354,32 @@ Return a valid JSON object with:
     });
   });
 
-  // 10. General AI Chat Endpoint
+  // 10. General AI Chat Endpoint — proxied to FastAPI (Ollama)
   app.post("/api/ai/chat", async (req, res) => {
     try {
-      const { messages } = req.body;
-      const ai = getGeminiClient();
-      if (ai && messages && messages.length > 0) {
-        try {
-          const contents = messages.map((m: any) => ({
-            role: m.role === 'user' ? 'user' : 'model',
-            parts: [{ text: m.content }]
-          }));
-          const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: contents
-          });
-          if (response.text) {
-            return res.json({ reply: response.text });
-          }
-        } catch (genErr) {
-          console.error("Gemini chat error:", genErr);
-        }
+      const response = await fetch("http://localhost:8000/api/ai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req.body)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: "FastAPI error" }));
+        return res.status(response.status).json({
+          error: errorData.detail || "AI backend error",
+          reply: "Sorry, the local AI model is unavailable. Make sure Ollama is running and FastAPI is started on port 8000."
+        });
       }
 
-      const lastMsg = messages?.[messages.length - 1]?.content || "Hello";
-      res.json({ reply: `Synthetix AI Assistant received: "${lastMsg}". I am your UCKR-grounded assistant, ready to help you analyze, transform, or refine your content.` });
+      const data = await response.json();
+      res.json(data);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error("AI Chat proxy error:", error.message);
+      res.json({
+        reply: "Could not reach the AI backend. Please ensure FastAPI is running on port 8000 with: uvicorn main:app --reload --port 8000",
+        intent: "error",
+        model: "unavailable"
+      });
     }
   });
 

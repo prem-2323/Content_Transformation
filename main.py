@@ -11,6 +11,7 @@ from multimodal.service import gemma_model as multimodal_gemma
 from image.routes import router as image_router
 from video.routes import router as video_router
 from consistency.routes import router as consistency_router
+from ai_chat.routes import router as ai_chat_router
 
 
 async def close_gemma_clients():
@@ -61,6 +62,7 @@ app.include_router(multimodal_router)
 app.include_router(image_router)
 app.include_router(video_router)
 app.include_router(consistency_router)
+app.include_router(ai_chat_router)
 
 
 MODEL_NAMES = ("qwen3:4b", "gemma3:4b", "stable-diffusion", "edge-tts")

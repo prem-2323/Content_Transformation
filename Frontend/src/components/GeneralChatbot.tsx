@@ -49,7 +49,7 @@ export const GeneralChatbot: React.FC = () => {
     setIsSending(true);
 
     try {
-      const res = await fetch('/api/ai/chat', {
+      const res = await fetch('http://localhost:8000/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: newMessages })
@@ -59,7 +59,7 @@ export const GeneralChatbot: React.FC = () => {
       setMessages([...newMessages, { role: 'assistant', content: reply }]);
     } catch (error) {
       console.error("Chat error:", error);
-      setMessages([...newMessages, { role: 'assistant', content: "Sorry, I encountered an error connecting to the AI backend. Please try again." }]);
+      setMessages([...newMessages, { role: 'assistant', content: "Could not reach the AI backend. Make sure Ollama is running and FastAPI is started on port 8000." }]);
     } finally {
       setIsSending(false);
     }
@@ -167,7 +167,7 @@ export const GeneralChatbot: React.FC = () => {
           </div>
           <div>
             <h2 className={`text-xl font-bold tracking-tight font-serif ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Synthetix AI Assistant</h2>
-            <p className={`text-xs ${isDarkMode ? 'text-[#b3b3b3]' : 'text-slate-500'}`}>General conversational AI backed by UCKR and Gemini 2.5 Flash</p>
+            <p className={`text-xs ${isDarkMode ? 'text-[#b3b3b3]' : 'text-slate-500'}`}>Local AI powered by Ollama &middot; Qwen3 4B</p>
           </div>
         </div>
 
