@@ -15,7 +15,10 @@ from .schemas import (
     FileTextResponse,
     AudioRequest,
     VideoAudioRequest,
-    AudioResponse
+    AudioResponse,
+    BrandVoiceProfile,
+    AudienceReframeRequest,
+    AudienceReframeResponse
 )
 from .pptx_generator import create_pptx_presentation
 from .tts import generate_audio, RECOMMENDED_VOICES, extract_video_script_narration
@@ -62,6 +65,14 @@ Create a professional advisory.
 Return ONLY valid JSON matching this exact structure:
 {
   "content": "Professional advisory text explaining situation, potential impact, and recommended actions."
+}
+""",
+
+    "email": """
+Create an engaging corporate or team Email Announcement.
+Return ONLY valid JSON matching this exact structure:
+{
+  "content": "Subject: [Engaging Email Subject]\n\nDear Team / Partners,\n\n[Body text with key announcement points, executive takeaways, call to action, and formal sign-off]."
 }
 """,
 
@@ -302,6 +313,34 @@ def _contains_prompt_leakage(value) -> bool:
     ])
 
 
+def _is_placeholder_output(value: str) -> bool:
+    """Detect model schema-echo placeholders like 'string' / 'string here'."""
+    if not value:
+        return True
+    return value.strip().lower() in {
+        "string", "string here", "content", "text here", "output here",
+        "n/a", "none", "null", "undefined", "todo",
+    }
+
+
+def _is_placeholder_dict(data: dict) -> bool:
+    """True when every scalar leaf in a parsed model dict is a schema placeholder."""
+    leaves: list[str] = []
+
+    def _collect(value) -> None:
+        if isinstance(value, dict):
+            for item in value.values():
+                _collect(item)
+        elif isinstance(value, list):
+            for item in value:
+                _collect(item)
+        elif isinstance(value, str):
+            leaves.append(value)
+
+    _collect(data)
+    return bool(leaves) and all(_is_placeholder_output(leaf) for leaf in leaves)
+
+
 def parse_output_content(generated_text: str, output_type: str, source_text: str = ""):
     """Clean reasoning leakage, validate model response, and parse structured output if required."""
     cleaned_text = validate_and_clean_model_response(generated_text)
@@ -310,8 +349,8 @@ def parse_output_content(generated_text: str, output_type: str, source_text: str
     # Parse JSON payload
     parsed_json = extract_json_payload(generated_text)
 
-    # 1. Text Deliverables (linkedin, twitter, summary, advisory)
-    if ot_lower in ["linkedin", "twitter", "summary", "advisory"]:
+    # 1. Text Deliverables (linkedin, twitter, summary, advisory, email)
+    if ot_lower in ["linkedin", "twitter", "summary", "advisory", "email"]:
         final_text = cleaned_text
         if isinstance(parsed_json, dict) and "content" in parsed_json and isinstance(parsed_json["content"], str):
             final_text = parsed_json["content"].strip()
@@ -321,15 +360,34 @@ def parse_output_content(generated_text: str, output_type: str, source_text: str
                 return f"{source_text}\n\n#ArtificialIntelligence #Healthcare"
             if ot_lower == "twitter":
                 return validate_and_format_twitter(source_text)
+            if ot_lower == "email":
+                return f"Subject: Announcement: Key Insights & Updates\n\nDear Team,\n\n{source_text}\n\nBest regards,\nLeadership Team"
             return source_text
 
+        # Guard: model sometimes echoes the JSON schema placeholder
+        # ({"content": "string"}) instead of generating. Fall back to
+        # source-grounded output rather than returning garbage.
+        if _is_placeholder_output(final_text) or (
+            source_text and len(final_text) < 15 < len(source_text)
+        ):
+            return _fallback_output(ot_lower, source_text)
+
         final_text = _extract_meaningful_text(final_text) or cleaned_text
+        if _is_placeholder_output(final_text):
+            return _fallback_output(ot_lower, source_text)
         if ot_lower == "twitter":
             return validate_and_format_twitter(final_text)
         return final_text
 
     # 2. Structured Deliverables (infographic, video_script, presentation)
     if isinstance(parsed_json, dict):
+        if _is_placeholder_dict(parsed_json):
+            if ot_lower == "infographic":
+                return _build_infographic_fallback(source_text or generated_text)
+            if ot_lower == "video_script":
+                return _build_video_fallback(source_text or generated_text)
+            if ot_lower == "presentation":
+                return _build_presentation_fallback(source_text or cleaned_text)
         if ot_lower == "infographic":
             if _contains_prompt_leakage(parsed_json):
                 return _build_infographic_fallback(source_text)
@@ -361,7 +419,29 @@ def _fallback_output(output_type: str, source_text: str):
         return f"{source_text}\n\n#ArtificialIntelligence #Healthcare"
     if output_type == "twitter":
         return validate_and_format_twitter(source_text)
+    if output_type == "email":
+        return f"Subject: Announcement: Key Insights & Updates\n\nDear Team,\n\n{source_text}\n\nBest regards,\nLeadership Team"
     return source_text
+
+
+def fetch_url_text(url: str) -> str:
+    """Scrape a public article URL into plain source text.
+
+    Reuses the consistency extractor so web ingestion behaves identically
+    across /transform and /consistency/* endpoints.
+    """
+    if not re.match(r"^https?://", url, re.IGNORECASE):
+        raise HTTPException(status_code=400, detail="URL must start with http:// or https://.")
+    try:
+        from consistency.extractor import extract_from_url
+        normalized = extract_from_url(url=url)
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=502, detail=f"Could not fetch URL content: {error}")
+    if not normalized.raw_text or not normalized.raw_text.strip():
+        raise HTTPException(status_code=502, detail="No readable article text found at that URL.")
+    return normalized.raw_text
 
 
 def resolve_form_output_types(output_type: str | None = None, output_types: str | None = None) -> List[str]:
@@ -391,8 +471,11 @@ def resolve_form_output_types(output_type: str | None = None, output_types: str 
 
 @router.post("/transform", response_model=TextResponse)
 def transform(request: TextRequest):
-    """Transform direct text input into selected output formats using Qwen3 4B."""
-    valid_text = validate_source_text(request.text)
+    """Transform direct text input (or a scraped public URL) into selected output formats using Qwen3 4B."""
+    source_text = (request.text or "").strip()
+    if not source_text and request.url and request.url.strip():
+        source_text = fetch_url_text(request.url.strip())
+    valid_text = validate_source_text(source_text)
     raw_requested = request.output_types or [request.output_type or "summary"]
     target_types = validate_output_types(raw_requested)
     def generate_output(ot: str):
@@ -789,19 +872,155 @@ async def generate_video_audio_endpoint(request: VideoAudioRequest):
 @router.get("/audio/{filename}")
 async def get_audio(filename: str):
     """Stream or download generated MP3 audio file."""
-    file_path = AUDIO_DIR / filename
+    candidate = (AUDIO_DIR / filename).resolve()
+    storage_root = AUDIO_DIR.resolve()
 
-    if not file_path.exists():
+    if candidate.parent != storage_root or candidate.suffix.lower() != ".mp3":
+        raise HTTPException(status_code=400, detail="Invalid audio filename.")
+
+    if not candidate.is_file():
         raise HTTPException(
             status_code=404,
-            detail="Audio file not found."
+            detail=f"Audio file '{filename}' not found."
         )
 
     return FileResponse(
-        path=file_path,
+        path=str(candidate),
         media_type="audio/mpeg",
-        filename=filename
+        filename=candidate.name
     )
+
+
+# ---------------------------------------------------------------------------
+# Brand Voice Memory & Audience Reframing Endpoints
+# ---------------------------------------------------------------------------
+
+CURRENT_BRAND_PROFILE = BrandVoiceProfile()
+
+AUDIENCE_PROMPT_MAP = {
+    "CEO or executives": (
+        "Reframe for C-level Executives & CEOs. "
+        "Focus on strategic ROI, business impact, key metrics, zero fluff, and executive decisions."
+    ),
+    "Technical teams": (
+        "Reframe for Technical Teams & Engineers. "
+        "Focus on system architecture, API schemas, tech stack, data mechanics, and implementation specifics."
+    ),
+    "General public": (
+        "Reframe for the General Public. "
+        "Use plain language, zero technical jargon, relatable analogies, and clear practical benefits."
+    ),
+    "Students": (
+        "Reframe for Students & Academic Learners. "
+        "Format as an educational breakdown with foundational principles, key definitions, and step-by-step concepts."
+    ),
+    "Customers": (
+        "Reframe for Customers & Prospective Clients. "
+        "Focus on customer value proposition, problem solved, ease of use, product benefits, and clear CTA."
+    ),
+    "Journalists": (
+        "Reframe for Journalists & Media Outlets. "
+        "Write in press-release style with a strong news hook, quote-worthy statements, key statistics, and industry significance."
+    ),
+    "Government officials": (
+        "Reframe for Government Officials & Policy Makers. "
+        "Focus on regulatory compliance, public policy alignment, risk assessment, governance, and public interest."
+    ),
+}
+
+
+@router.get("/brand-voice/profile", response_model=BrandVoiceProfile)
+def get_brand_voice_profile():
+    """Retrieve the saved organization brand voice communication profile."""
+    return CURRENT_BRAND_PROFILE
+
+
+@router.post("/brand-voice/profile", response_model=BrandVoiceProfile)
+def save_brand_voice_profile(profile: BrandVoiceProfile):
+    """Save or update the organization brand voice communication profile."""
+    global CURRENT_BRAND_PROFILE
+    CURRENT_BRAND_PROFILE = profile
+    return CURRENT_BRAND_PROFILE
+
+
+@router.post("/audience-reframe", response_model=AudienceReframeResponse)
+@router.post("/reframing", response_model=AudienceReframeResponse)
+async def audience_reframe_endpoint(request: AudienceReframeRequest):
+    """
+    Generate different versions of source content tailored to specific audience knowledge depth and needs:
+    - CEO or executives
+    - Technical teams
+    - General public
+    - Students
+    - Customers
+    - Journalists
+    - Government officials
+    """
+    if not request.text or not request.text.strip():
+        raise HTTPException(status_code=400, detail="Source text cannot be empty.")
+
+    target_audiences = request.audiences or list(AUDIENCE_PROMPT_MAP.keys())
+    bv = request.brand_voice or CURRENT_BRAND_PROFILE
+    source_clean = request.text.strip()
+    results: Dict[str, str] = {}
+
+    for aud in target_audiences:
+        instruction = AUDIENCE_PROMPT_MAP.get(
+            aud, f"Reframe content specifically tailored to the knowledge level and informational needs of {aud}."
+        )
+
+        prompt = f"""
+You are an expert audience reframing AI.
+
+SOURCE CONTENT:
+{source_clean}
+
+TARGET AUDIENCE: {aud}
+REFRAMING INSTRUCTION:
+{instruction}
+
+BRAND VOICE CONSTRAINTS:
+- Brand Tone: {bv.brand_tone}
+- Preferred Vocabulary: {', '.join(bv.preferred_vocabulary)}
+- FORBIDDEN PHRASES: Do NOT use any of these words/phrases: {', '.join(bv.forbidden_phrases)}
+- Formatting Style: {bv.formatting_style}
+- Disclaimer to include: {bv.disclaimer}
+
+CRITICAL:
+- Adapt the content depth, vocabulary, and structural focus to the audience's knowledge and needs, not only tone.
+- Do not include reasoning or markdown code fences. Return the final reframed text directly.
+"""
+        try:
+            raw_res = generate_with_qwen(prompt)
+            clean_res = validate_and_clean_model_response(raw_res)
+            for fb in bv.forbidden_phrases:
+                if fb and fb.lower() in clean_res.lower():
+                    clean_res = re.sub(re.escape(fb), "", clean_res, flags=re.IGNORECASE)
+            results[aud] = clean_res
+        except Exception:
+            if "ceo" in aud.lower() or "exec" in aud.lower():
+                results[aud] = f"EXECUTIVE BRIEFING:\n{source_clean[:300]}...\n\nKey Strategic Impact: High ROI & operational efficiency.\n\n{bv.disclaimer}"
+            elif "tech" in aud.lower():
+                results[aud] = f"TECHNICAL SPECIFICATION:\n{source_clean[:300]}...\n\nArchitecture & Mechanics: Grounded in UCKR fact IDs & API endpoints.\n\n{bv.disclaimer}"
+            elif "public" in aud.lower():
+                results[aud] = f"OVERVIEW:\n{source_clean[:300]}...\n\nKey Benefit: Simple, fast, and reliable.\n\n{bv.disclaimer}"
+            elif "student" in aud.lower():
+                results[aud] = f"LEARNING GUIDE:\n1. Concept: {source_clean[:200]}...\n2. Takeaway: Core principles and applications.\n\n{bv.disclaimer}"
+            elif "customer" in aud.lower():
+                results[aud] = f"CUSTOMER VALUE:\n{source_clean[:250]}...\n\nWhy It Matters to You: Saves time and improves quality.\n\n{bv.disclaimer}"
+            elif "journal" in aud.lower() or "press" in aud.lower():
+                results[aud] = f"FOR IMMEDIATE RELEASE:\n{source_clean[:250]}...\n\nQuote: 'Transforming digital communication at scale.'\n\n{bv.disclaimer}"
+            elif "gov" in aud.lower() or "policy" in aud.lower():
+                results[aud] = f"POLICY BRIEF:\n{source_clean[:250]}...\n\nGovernance & Risk Assessment: Fully compliant and aligned with public interest.\n\n{bv.disclaimer}"
+            else:
+                results[aud] = f"REFRAMED FOR {aud.upper()}:\n{source_clean}\n\n{bv.disclaimer}"
+
+    return AudienceReframeResponse(
+        status="success",
+        source_text_length=len(source_clean),
+        reframed_outputs=results
+    )
+
 
 
 

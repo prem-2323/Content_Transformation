@@ -22,6 +22,8 @@ import { TranslationStudio } from './components/TranslationStudio';
 import { FactRegistry } from './components/FactRegistry';
 import { ConsistencyPipeline } from './components/ConsistencyPipeline';
 import { QualityScoreDashboard } from './components/QualityScoreDashboard';
+import { AudienceReframer } from './components/AudienceReframer';
+import { BrandVoiceStudio } from './components/BrandVoiceStudio';
 import { OpenApiModal } from './components/OpenApiModal';
 import { HomePage } from './components/HomePage';
 import { LoginPage } from './components/LoginPage';
@@ -29,7 +31,7 @@ import { doc, setDoc } from 'firebase/firestore';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { db, auth } from './lib/firebase';
 import { useTheme } from './context/ThemeContext';
-import { transformApi } from './api/transform';
+import { transformApi, normalizeOutputTypes } from './api/transform';
 
 export default function App() {
   const { isDarkMode } = useTheme();
@@ -78,11 +80,19 @@ export default function App() {
         formData.append('detail_level', payload.detail_level);
         formData.append('objective', payload.objective);
         if (payload.output_types) {
-          formData.append('output_types', payload.output_types.join(','));
+          // Normalize display names (e.g. "Twitter/X Post") to backend canonical
+          // types (e.g. "twitter") — same mapping as the text path.
+          const normalized = normalizeOutputTypes(payload.output_types) ?? payload.output_types;
+          formData.append('output_types', normalized.join(','));
         }
         data = await transformApi.transformFile(formData);
       } else {
         data = await transformApi.transformText(payload);
+      }
+      // Carry the requested MP3 add-ons on the result so ResultsWorkspace can
+      // offer on-demand neural narration (POST /generate-audio) for them.
+      if (payload.mp3_addons?.length && data && typeof data === 'object') {
+        data = { ...data, mp3_addons: payload.mp3_addons };
       }
       setTransformationResult(data);
 
@@ -90,7 +100,11 @@ export default function App() {
       const historyItem = {
         id: Date.now().toString(),
         timestamp: new Date().toISOString(),
-        sourceText: isFile ? `[File Upload]: ${payload.file?.name}` : payload.text,
+        sourceText: isFile
+          ? `[File Upload]: ${payload.file?.name}`
+          : payload.url
+            ? `[URL]: ${payload.url}`
+            : payload.text,
         config: {
           audience: payload.audience,
           tone: payload.tone,
@@ -215,6 +229,7 @@ export default function App() {
                   key={keepInitialText || 'default'}
                   onRunTransform={handleRunTransform}
                   isLoading={isLoading}
+                  onCancel={() => setIsLoading(false)}
                   initialSourceText={keepInitialText || undefined}
                 />
               )}
@@ -222,6 +237,10 @@ export default function App() {
               {activeTab === 'processing' && (
                 <ProcessingView
                   onComplete={() => setActiveTab('results')}
+                  onCancel={() => {
+                    setIsLoading(false);
+                    setActiveTab('transform');
+                  }}
                 />
               )}
 
@@ -277,6 +296,14 @@ export default function App() {
 
               {activeTab === 'translation' && (
                 <TranslationStudio />
+              )}
+
+              {activeTab === 'audience' && (
+                <AudienceReframer />
+              )}
+
+              {activeTab === 'brand_voice' && (
+                <BrandVoiceStudio />
               )}
 
               {activeTab === 'registry' && (

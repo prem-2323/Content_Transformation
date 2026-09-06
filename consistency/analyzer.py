@@ -100,8 +100,11 @@ OUTPUT FORMAT CONSTRAINTS:
 
 
 def _clean_json_response(raw_text: str) -> str:
-    """Strip markdown code fences and extraneous text from LLM response."""
-    text = raw_text.strip()
+    """Strip markdown code fences, <think> blocks, and extraneous text from LLM response."""
+    if not raw_text:
+        return ""
+    # Remove Qwen3 <think>...</think> reasoning traces (emitted even with think=False)
+    text = re.sub(r"<think>.*?</think>", "", raw_text, flags=re.DOTALL | re.IGNORECASE).strip()
     if "```json" in text:
         text = text.split("```json", 1)[1]
         if "```" in text:
@@ -110,6 +113,13 @@ def _clean_json_response(raw_text: str) -> str:
         text = text.split("```", 1)[1]
         if "```" in text:
             text = text.split("```", 1)[0]
+    text = text.strip()
+    # If extra prose surrounds the JSON object, extract the outermost {...}
+    if not text.startswith("{"):
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            text = text[start:end + 1]
     return text.strip()
 
 
@@ -327,15 +337,21 @@ def create_fallback_uckr(source: NormalizedSource) -> UCKR:
     )
 
 
-def analyze_source_and_build_uckr(source: NormalizedSource) -> UCKR:
+def analyze_source_and_build_uckr(source: NormalizedSource, use_llm: bool = True) -> UCKR:
     """
     Stage 3 & 4: Content Understanding & Common Knowledge Representation Creation.
     Sends extracted source to Qwen3 4B to build the Unified Content Knowledge Representation (UCKR).
+
+    Set use_llm=False (or ?fast=true on the API) to skip the LLM call and use
+    the deterministic fallback instantly — useful when Ollama is slow/overloaded.
     """
+    if not use_llm:
+        return create_fallback_uckr(source)
+
     prompt = UCKR_ANALYSIS_PROMPT_TEMPLATE.format(
         title=source.title,
         source_id=source.source_id,
-        source_text=source.raw_text[:6000]  # Limit length for prompt context window
+        source_text=source.raw_text[:4000]  # Limit length for prompt context window
     )
 
     try:

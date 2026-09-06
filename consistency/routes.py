@@ -19,10 +19,13 @@ from .schemas import (
     SelectiveRegenerationResponse,
     QualityScoreRequest,
     ContentQualityReport,
-    DeliverablesQualityReport
+    DeliverablesQualityReport,
+    EvidenceRequest,
+    EvidenceTraceReport
 )
 from .engine import ConsistencyEngine
 from .fact_registry import get_registry, get_or_create_registry, FactRegistry
+from .provenance import ProvenanceTracker
 from .validators import ConsistencyValidator
 from .repair import AutoRepairEngine
 from .versioning import UCKRVersionManager
@@ -98,24 +101,31 @@ async def extract_endpoint(
 
 @router.post("/analyze", response_model=AnalyzeResponse)
 async def analyze_endpoint(
-    request: AnalyzeRequest
+    request: AnalyzeRequest,
+    fast: bool = Query(False, description="Skip LLM and use instant deterministic fallback"),
 ):
     """
     Stage 3 & 4: Content Understanding & Common Knowledge Representation Creation.
     Constructs the Unified Content Knowledge Representation (UCKR) containing atomic
     facts with IDs (F001, F002...), entities, claims, statistics, and relationships.
+
+    Common Knowledge Representation = single source of truth feeding
+    LinkedIn / Slides / Video generators downstream.
     """
     try:
+        use_llm = (not fast) and request.use_llm
         if request.normalized_source:
-            uckr = ConsistencyEngine.analyze(request.normalized_source)
+            uckr = ConsistencyEngine.analyze(request.normalized_source, use_llm=use_llm)
             return AnalyzeResponse(uckr=uckr)
 
         if request.raw_text:
             normalized = ConsistencyEngine.extract(raw_text=request.raw_text, title=request.title)
-            uckr = ConsistencyEngine.analyze(normalized)
+            uckr = ConsistencyEngine.analyze(normalized, use_llm=use_llm)
             return AnalyzeResponse(uckr=uckr)
 
         raise HTTPException(status_code=400, detail="Must provide either normalized_source or raw_text.")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"UCKR knowledge analysis failed: {str(e)}")
 
@@ -154,17 +164,21 @@ async def get_registry_facts_endpoint(
 
 @router.post("/generate", response_model=GenerateDeliverablesResponse)
 async def generate_deliverables_endpoint(
-    request: GenerateDeliverablesRequest
+    request: GenerateDeliverablesRequest,
+    fast: bool = Query(False, description="Skip LLM and use instant deterministic grounded generation"),
 ):
     """
     Stage 7: Fact-Grounded Output Generation.
     Generates multi-channel deliverables (Summary, LinkedIn, Presentation, Video, etc.)
-    with explicit attribution to UCKR fact IDs and performs a consistency audit.
+    with explicit attribution to UCKR fact IDs and performs a consistency audit
+    + quality-score in the same response.
     """
     try:
+        use_llm = (not fast) and request.use_llm
         results = ConsistencyEngine.generate_deliverables(
             uckr=request.uckr,
-            config=request.config or OutputGenerationConfig()
+            config=request.config or OutputGenerationConfig(),
+            use_llm=use_llm
         )
         return GenerateDeliverablesResponse(
             source_id=results["source_id"],
@@ -172,7 +186,8 @@ async def generate_deliverables_endpoint(
             consistency_audit=results["consistency_audit"],
             validation_report=results.get("validation_report"),
             repair_result=results.get("repair_result"),
-            quality_report=results.get("quality_report")
+            quality_report=results.get("quality_report"),
+            evidence_trace=results.get("evidence_trace")
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Deliverable generation failed: {str(e)}")
@@ -180,17 +195,36 @@ async def generate_deliverables_endpoint(
 
 @router.post("/pipeline")
 async def full_pipeline_endpoint(
-    request: Request
+    request: Request,
+    fast: bool = Query(False, description="Skip LLM and use instant deterministic fallback"),
 ):
     """
-    Full 7-Step Content Consistency Pipeline (End-to-End):
+    Full Content Consistency Pipeline (End-to-End) — the platform differentiator:
+
+                 SOURCE
+                   ↓
+          ┌─────────────────┐
+          │ Common Knowledge │
+          │ Representation   │  (UCKR: facts F001.. + entities + claims + stats)
+          └────────┬────────┘
+                   ↓
+       ┌───────────┼───────────┐
+       ↓           ↓           ↓
+   LinkedIn     Slides       Video   (+ summary/twitter/advisory)
+       ↓           ↓           ↓
+       └───────────┼───────────┘
+                   ↓
+          Consistency Check (audit + validation + repair)
+                   ↓
+             Quality Score (6 dimensions)
+
     1. Ingestion (File/Text/URL via JSON or Multipart Form)
     2. Source Extraction Layer -> NormalizedSource
-    3. Content Understanding Layer via LLM
+    3. Content Understanding Layer (Qwen3, or instant fallback with ?fast=true)
     4. Unified Content Knowledge Representation (UCKR) Construction
     5. Fact ID Attribution System (F001, F002...)
     6. Central Fact Registry Integration
-    7. Multi-Channel Grounded Generation (Summary, LinkedIn, Presentation, Video) + Consistency Audit
+    7. Multi-Channel Grounded Generation + Consistency Audit + Quality Score
     """
     try:
         content_type = request.headers.get("content-type", "").lower()
@@ -206,6 +240,7 @@ async def full_pipeline_endpoint(
         language = "English"
         slide_count = 4
         video_duration = 30
+        use_llm = not fast
 
         if "application/json" in content_type:
             body = await request.json()
@@ -218,10 +253,14 @@ async def full_pipeline_endpoint(
             language = body.get("language") or body.get("target_language") or language
             slide_count = int(body.get("slide_count", slide_count))
             video_duration = int(body.get("video_duration", video_duration))
+            if "use_llm" in body:
+                use_llm = bool(body.get("use_llm")) and (not fast)
+            if body.get("fast") is True:
+                use_llm = False
         else:
             form = await request.form()
             uploaded_file = form.get("file")
-            raw_text = form.get("raw_text")
+            raw_text = form.get("raw_text") or form.get("text")
             url = form.get("url")
             title = form.get("title")
             output_types = form.get("output_types", output_types)
@@ -233,6 +272,13 @@ async def full_pipeline_endpoint(
                 slide_count = int(form.get("slide_count"))
             if form.get("video_duration"):
                 video_duration = int(form.get("video_duration"))
+            if form.get("use_llm") is not None:
+                val = str(form.get("use_llm")).lower()
+                use_llm = val not in ("false", "0", "no", "off") and (not fast)
+            if form.get("fast") is not None:
+                val = str(form.get("fast")).lower()
+                if val in ("true", "1", "yes", "on"):
+                    use_llm = False
 
             if uploaded_file and hasattr(uploaded_file, "read"):
                 file_bytes = await uploaded_file.read()
@@ -241,7 +287,11 @@ async def full_pipeline_endpoint(
         if not file_bytes and not raw_text and not url:
             raise HTTPException(status_code=400, detail="Must provide a file, raw_text, or url.")
 
-        types_list = [t.strip() for t in (output_types or "summary,linkedin").split(",") if t.strip()]
+        # Accept output_types as list or comma-separated string
+        if isinstance(output_types, list):
+            types_list = [str(t).strip() for t in output_types if str(t).strip()]
+        else:
+            types_list = [t.strip() for t in (output_types or "summary,linkedin").split(",") if t.strip()]
         config = OutputGenerationConfig(
             output_types=types_list,
             audience=str(audience),
@@ -257,13 +307,32 @@ async def full_pipeline_endpoint(
             raw_text=str(raw_text) if raw_text else None,
             url=str(url) if url else None,
             title=str(title) if title else None,
-            config=config
+            config=config,
+            use_llm=use_llm
         )
         return JSONResponse(status_code=200, content=result)
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Pipeline processing failed: {str(e)}")
+
+
+@router.get("/health")
+async def consistency_health():
+    """Consistency Engine health: confirms all 5 stages are wired."""
+    return {
+        "status": "healthy",
+        "engine": "Content Consistency Engine (UCKR + Fact Registry + Grounded Generators)",
+        "architecture": "SOURCE -> Common Knowledge Representation -> LinkedIn/Slides/Video -> Consistency Check -> Quality Score",
+        "stages": {
+            "extract": "POST /consistency/extract",
+            "analyze": "POST /consistency/analyze",
+            "generate": "POST /consistency/generate",
+            "pipeline": "POST /consistency/pipeline",
+            "quality_score": "POST /consistency/quality-score",
+            "evidence": "POST /consistency/evidence",
+        },
+    }
 
 
 @router.get("/languages")
@@ -332,6 +401,33 @@ async def audit_endpoint(
 
     audit_result = registry.audit_deliverables(outputs)
     return audit_result.model_dump()
+
+
+@router.post("/evidence", response_model=EvidenceTraceReport)
+async def evidence_endpoint(request: EvidenceRequest):
+    """
+    Evidence Traceability: trace EVERY generated statement back to its source.
+
+    For each statement in each channel (summary sentences, LinkedIn post,
+    slide bullets, video narrations, tweets, advisory sections) returns:
+    - statement text + location (channel / container, e.g. slide_2, scene_3)
+    - source Fact IDs (F001, F002...) + verbatim source statements
+    - source page numbers + section references
+    - match confidence (0.0-1.0) + verification status (verified / likely / unmatched)
+
+    Also returns a fact_lookup table (Fact ID -> verbatim statement) and the
+    list of registered facts no statement cited. Built for government,
+    cybersecurity, research, and enterprise audit workflows.
+    """
+    try:
+        report = ProvenanceTracker.build_evidence_trace(
+            uckr=request.uckr,
+            outputs=request.outputs,
+            source_id=request.source_id or request.uckr.document.id
+        )
+        return report
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Evidence trace failed: {str(e)}")
 
 
 @router.post("/validate", response_model=DetailedValidationReport)

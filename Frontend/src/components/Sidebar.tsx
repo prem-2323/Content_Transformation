@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Terminal, ShieldCheck, FileText, Clock, MessageSquare, StickyNote, Upload, Image, Film, Video, Volume2, Presentation, Languages, Layers, Award, HardDrive, X } from 'lucide-react';
+import { Sparkles, Terminal, ShieldCheck, FileText, Clock, MessageSquare, StickyNote, Upload, Image, Film, Video, Volume2, Presentation, Languages, Layers, Award, HardDrive, X, Users, Sliders } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useTheme } from '../context/ThemeContext';
 
@@ -22,6 +22,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
       items: [
         { id: 'transform', label: 'Transform Engine', icon: Sparkles },
         { id: 'results', label: 'Results Workspace', icon: FileText },
+        { id: 'audience', label: 'Audience Reframing', icon: Users },
       ]
     },
     {
@@ -37,10 +38,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
       ]
     },
     {
-      title: 'OUTPUTS',
+      title: 'OUTPUTS & BRAND',
       items: [
         { id: 'presentation', label: 'Presentation', icon: Presentation },
         { id: 'translation', label: 'Translation', icon: Languages },
+        { id: 'brand_voice', label: 'Brand Voice', icon: Sliders },
       ]
     },
     {

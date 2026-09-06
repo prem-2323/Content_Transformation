@@ -128,6 +128,56 @@ class ProvenanceItem(BaseModel):
     source_pages: List[int] = Field(default_factory=list)
     source_sections: List[str] = Field(default_factory=list)
     confidence: float = 0.95
+    # Audit-grade evidence: verbatim source fact text + verification status.
+    source_statements: List[str] = Field(
+        default_factory=list,
+        description="Verbatim source fact statements backing this segment"
+    )
+    verification: str = Field(
+        default="verified",
+        description="Match quality: verified, likely, or unmatched"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Step 11b: Statement-Level Evidence Traceability
+# Every generated statement links back to: fact IDs, verbatim source
+# statements, page/section references, match confidence, verification status.
+# Built for government, cybersecurity, research, and enterprise audit needs.
+# ---------------------------------------------------------------------------
+
+class StatementEvidence(BaseModel):
+    channel: str = Field(..., description="Deliverable channel (summary, linkedin, presentation, video, twitter, advisory)")
+    container: str = Field(default="", description="Location inside the channel (e.g. slide_2, scene_3, tweet_1, headline)")
+    statement_index: int = Field(default=0, description="Ordinal of the statement within its channel")
+    statement_type: str = Field(default="sentence", description="Kind of statement: sentence, bullet, narration, caption, tweet, section, action")
+    statement_text: str = Field(..., description="Verbatim generated statement")
+    source_facts: List[str] = Field(default_factory=list, description="Grounded Fact IDs (F001, F002...)")
+    source_statements: List[str] = Field(default_factory=list, description="Verbatim source fact statements")
+    source_pages: List[int] = Field(default_factory=list, description="Source page numbers")
+    source_sections: List[str] = Field(default_factory=list, description="Source section references")
+    confidence: float = Field(default=0.8, ge=0.0, le=1.0, description="Grounding match confidence 0.0-1.0")
+    verification: str = Field(default="unmatched", description="verified, likely, or unmatched")
+
+
+class EvidenceTraceReport(BaseModel):
+    status: str = "success"
+    source_id: str = Field(default="", description="UCKR document / source identifier")
+    document_title: str = Field(default="")
+    total_statements: int = Field(default=0, description="Total generated statements traced")
+    verified_statements: int = Field(default=0, description="Statements with verified grounding")
+    likely_statements: int = Field(default=0, description="Statements with likely (partial) grounding")
+    unmatched_statements: int = Field(default=0, description="Statements with no source grounding")
+    verification_rate: float = Field(default=0.0, description="Share of statements verified or likely (0-100)")
+    channels: Dict[str, List[StatementEvidence]] = Field(default_factory=dict)
+    fact_lookup: Dict[str, Dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Fact ID -> {statement, source_reference, importance} for instant audit"
+    )
+    uncovered_facts: List[str] = Field(
+        default_factory=list,
+        description="Registered Fact IDs cited by no generated statement"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -159,6 +209,10 @@ class SlideItem(BaseModel):
     visual_recommendation: Optional[str] = Field(default="")
     source_facts: List[str] = Field(default_factory=list)
     source_pages: List[int] = Field(default_factory=list)
+    evidence: List[ProvenanceItem] = Field(
+        default_factory=list,
+        description="Per-statement evidence for title, bullets, and speaker notes"
+    )
 
 
 class GroundedPresentation(BaseModel):
@@ -166,6 +220,10 @@ class GroundedPresentation(BaseModel):
     subtitle: Optional[str] = ""
     slides: List[SlideItem] = Field(default_factory=list)
     source_facts: List[str] = Field(default_factory=list)
+    evidence: List[ProvenanceItem] = Field(
+        default_factory=list,
+        description="Flattened per-statement evidence across all slides"
+    )
 
 
 class SceneItem(BaseModel):
@@ -186,6 +244,10 @@ class SceneItem(BaseModel):
     subtitle_end: Optional[str] = Field(default="00:00:05,000", description="SRT formatted end time")
     source_facts: List[str] = Field(default_factory=list)
     source_pages: List[int] = Field(default_factory=list)
+    evidence: List[ProvenanceItem] = Field(
+        default_factory=list,
+        description="Per-statement evidence for narration and on-screen text"
+    )
 
 
 class GroundedVideo(BaseModel):
@@ -195,23 +257,39 @@ class GroundedVideo(BaseModel):
     source_facts: List[str] = Field(default_factory=list)
     timeline: List[Dict[str, Any]] = Field(default_factory=list)
     ffmpeg_sync_metadata: Dict[str, Any] = Field(default_factory=dict)
+    evidence: List[ProvenanceItem] = Field(
+        default_factory=list,
+        description="Flattened per-statement evidence across all scenes"
+    )
 
 
 class TweetItem(BaseModel):
     tweet_number: int
     text: str
     source_facts: List[str] = Field(default_factory=list)
+    evidence: List[ProvenanceItem] = Field(
+        default_factory=list,
+        description="Per-statement evidence for this tweet"
+    )
 
 
 class GroundedTwitter(BaseModel):
     thread: List[TweetItem] = Field(default_factory=list)
     source_facts: List[str] = Field(default_factory=list)
+    evidence: List[ProvenanceItem] = Field(
+        default_factory=list,
+        description="Flattened per-statement evidence across the thread"
+    )
 
 
 class AdvisorySection(BaseModel):
     heading: str
     content: str
     source_facts: List[str] = Field(default_factory=list)
+    evidence: List[ProvenanceItem] = Field(
+        default_factory=list,
+        description="Per-statement evidence for this section"
+    )
 
 
 class GroundedAdvisory(BaseModel):
@@ -220,6 +298,10 @@ class GroundedAdvisory(BaseModel):
     recommended_actions: List[str] = Field(default_factory=list)
     sections: List[AdvisorySection] = Field(default_factory=list)
     source_facts: List[str] = Field(default_factory=list)
+    evidence: List[ProvenanceItem] = Field(
+        default_factory=list,
+        description="Flattened per-statement evidence across the advisory"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -331,6 +413,9 @@ class AnalyzeRequest(BaseModel):
     normalized_source: Optional[NormalizedSource] = None
     raw_text: Optional[str] = None
     title: Optional[str] = None
+    # When True (default) the engine tries Qwen3 then falls back on failure.
+    # Set to False (or ?fast=true) to use instant deterministic extraction.
+    use_llm: bool = True
 
 
 class AnalyzeResponse(BaseModel):
@@ -341,6 +426,7 @@ class AnalyzeResponse(BaseModel):
 class GenerateDeliverablesRequest(BaseModel):
     uckr: UCKR
     config: Optional[OutputGenerationConfig] = None
+    use_llm: bool = True
 
 
 class GenerateDeliverablesResponse(BaseModel):
@@ -351,6 +437,7 @@ class GenerateDeliverablesResponse(BaseModel):
     validation_report: Optional[DetailedValidationReport] = None
     repair_result: Optional[AutoRepairResult] = None
     quality_report: Optional[Dict[str, Any]] = None
+    evidence_trace: Optional[EvidenceTraceReport] = None
 
 
 class ConsistencyAuditResult(BaseModel):
@@ -404,3 +491,9 @@ class QualityScoreRequest(BaseModel):
     uckr: Optional[UCKR] = None
     target_audience: str = "Professional"
     target_tone: str = "Authoritative and engaging"
+
+
+class EvidenceRequest(BaseModel):
+    uckr: UCKR = Field(..., description="Unified Content Knowledge Representation to trace against")
+    outputs: Dict[str, Any] = Field(..., description="Generated deliverables to trace statement by statement")
+    source_id: Optional[str] = Field(default=None, description="Override source identifier in the report")

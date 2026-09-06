@@ -55,6 +55,39 @@ export interface TranslateRequest {
   outputs?: any;
 }
 
+export interface AuditRequest {
+  source_id: string;
+  outputs: Record<string, any>;
+}
+
+export interface ValidateRequest {
+  uckr: any;
+  outputs: Record<string, any>;
+}
+
+export interface RepairRequest {
+  uckr: any;
+  outputs: Record<string, any>;
+}
+
+export interface DiffRequest {
+  v1: any;
+  v2: any;
+}
+
+export interface RegenerateAffectedRequest {
+  uckr_v2: any;
+  diff: any;
+  previous_outputs: Record<string, any>;
+  config?: any;
+}
+
+export interface EvidenceRequest {
+  uckr: any;
+  outputs: Record<string, any>;
+  source_id?: string;
+}
+
 export const consistencyApi = {
   extractFacts: async (data: ExtractFactsRequest | FormData) => {
     if (data instanceof FormData) {
@@ -146,5 +179,41 @@ export const consistencyApi = {
       'German',
       'Japanese',
     ];
+  },
+
+  // ---------------------------------------------------------------------------
+  // Newly Integrated Consistency Endpoints
+  // ---------------------------------------------------------------------------
+
+  audit: async (data: AuditRequest) => {
+    const res = await apiClient.post('/consistency/audit', data);
+    return res.data;
+  },
+
+  validate: async (data: ValidateRequest) => {
+    const res = await apiClient.post('/consistency/validate', data);
+    return res.data;
+  },
+
+  repair: async (data: RepairRequest) => {
+    const res = await apiClient.post('/consistency/repair', data);
+    return res.data;
+  },
+
+  diff: async (data: DiffRequest) => {
+    const res = await apiClient.post('/consistency/diff', data);
+    return res.data;
+  },
+
+  regenerateAffected: async (data: RegenerateAffectedRequest) => {
+    const res = await apiClient.post('/consistency/regenerate-affected', data);
+    return res.data;
+  },
+
+  getEvidence: async (data: EvidenceRequest) => {
+    const res = await apiClient.post('/consistency/evidence', data, {
+      timeout: 120000,
+    });
+    return res.data;
   },
 };

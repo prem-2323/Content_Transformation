@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, Globe, Sparkles, Sliders, CheckCircle2, ArrowRight, Layers, FileUp, Video, Image as ImageIcon, Bookmark, Trash2, Plus, Share2, MessageSquare, ShieldAlert, PieChart, Presentation, Volume2, Music } from 'lucide-react';
+import { Upload, FileText, Globe, Sparkles, Sliders, CheckCircle2, ArrowRight, Layers, FileUp, Video, Image as ImageIcon, Bookmark, Trash2, Plus, Share2, MessageSquare, ShieldAlert, PieChart, Presentation, Volume2, Music, Mail, Square, Clock } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 
 interface TransformationFormProps {
   onRunTransform: (payload: any, isFile: boolean) => void;
   isLoading: boolean;
+  onCancel?: () => void;
   initialConfig?: any;
   initialSourceText?: string;
 }
 
-export const TransformationForm: React.FC<TransformationFormProps> = ({ onRunTransform, isLoading, initialConfig, initialSourceText }) => {
+export const TransformationForm: React.FC<TransformationFormProps> = ({ onRunTransform, isLoading, onCancel, initialConfig, initialSourceText }) => {
   const { isDarkMode } = useTheme();
   const [inputType, setInputType] = useState<'text' | 'file' | 'url'>('text');
   const [sourceText, setSourceText] = useState(initialSourceText || `Our primary objective for the coming fiscal year focuses on aggressive market expansion into the APAC region, leveraging our localized AI solutions to address specific regulatory and customer requirements across Singapore, Tokyo, and Sydney.`);
@@ -30,7 +31,8 @@ export const TransformationForm: React.FC<TransformationFormProps> = ({ onRunTra
     'Advisory',
     'Infographic',
     'Presentation',
-    'Video'
+    'Video',
+    'Email Announcement'
   ]);
   const [selectedMp3Addons, setSelectedMp3Addons] = useState<string[]>(initialConfig?.mp3_addons || [
     'Executive Voiceover (MP3)'
@@ -40,6 +42,7 @@ export const TransformationForm: React.FC<TransformationFormProps> = ({ onRunTra
   const [customTemplates, setCustomTemplates] = useState<any[]>([]);
   const [newTemplateName, setNewTemplateName] = useState('');
   const [showSaveModal, setShowSaveModal] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('synthetix_custom_templates');
@@ -51,6 +54,28 @@ export const TransformationForm: React.FC<TransformationFormProps> = ({ onRunTra
       }
     }
   }, []);
+
+  const calculateEstimatedTime = () => {
+    let wordCount = 0;
+    if (inputType === 'text') {
+      wordCount = sourceText.trim() ? sourceText.trim().split(/\s+/).length : 0;
+    } else if (file) {
+      wordCount = Math.round(file.size / 6);
+    } else {
+      wordCount = 150;
+    }
+
+    const baseSec = Math.max(1, Math.round(wordCount / 100));
+    const outputCount = selectedOutputs.length;
+    const detailFactor = detailLevel.includes('Concise') ? 0.8 : detailLevel.includes('Medium') ? 1.0 : detailLevel.includes('Comprehensive') ? 1.4 : 1.8;
+
+    const totalSec = Math.max(3, Math.round(baseSec + (outputCount * 1.2 * detailFactor)));
+    
+    if (totalSec < 60) return `~${totalSec} sec`;
+    const mins = Math.floor(totalSec / 60);
+    const secs = totalSec % 60;
+    return `~${mins}m ${secs}s`;
+  };
 
   const handleSaveTemplate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,7 +126,8 @@ export const TransformationForm: React.FC<TransformationFormProps> = ({ onRunTra
     { id: 'Advisory', label: 'Advisory Memo', desc: 'Formal confidential briefing document', icon: ShieldAlert },
     { id: 'Infographic', label: 'Infographic Spec', desc: 'Structured metrics & bullet points for visuals', icon: PieChart },
     { id: 'Presentation', label: 'Presentation (.pptx)', desc: 'Slide deck outline with titles & talking points', icon: Presentation },
-    { id: 'Video', label: 'Video Storyboard', desc: 'Scene-by-scene script with timestamps & voice prompts', icon: Video }
+    { id: 'Video', label: 'Video Storyboard', desc: 'Scene-by-scene script with timestamps & voice prompts', icon: Video },
+    { id: 'Email Announcement', label: 'Email Announcement', desc: 'Engaging corporate broadcast or team email update', icon: Mail }
   ];
 
   const mp3AddonOptions = [
@@ -137,8 +163,24 @@ export const TransformationForm: React.FC<TransformationFormProps> = ({ onRunTra
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+    if (inputType === 'file') {
+      if (!file) {
+        setFormError('Select a TXT, PDF or DOCX file first.');
+        return;
+      }
+    } else if (inputType === 'url') {
+      if (!sourceUrl.trim()) {
+        setFormError('Enter a public article URL first — the backend scrapes and transforms it.');
+        return;
+      }
+    } else if (!sourceText.trim()) {
+      setFormError('Enter source text first — e.g. paste the article to turn into a LinkedIn post.');
+      return;
+    }
     const payload = {
-      text: sourceText,
+      text: inputType === 'url' ? '' : sourceText,
+      url: inputType === 'url' ? sourceUrl.trim() : undefined,
       audience,
       tone,
       language,
@@ -231,14 +273,14 @@ export const TransformationForm: React.FC<TransformationFormProps> = ({ onRunTra
                 id="file-upload"
                 onChange={(e) => setFile(e.target.files?.[0] || null)}
                 className="hidden"
-                accept=".pdf,.docx,.txt,.png,.jpg,.jpeg"
+                accept=".pdf,.docx,.txt"
               />
               <label htmlFor="file-upload" className="cursor-pointer flex flex-col items-center">
                 <div className="w-12 h-12 rounded-full bg-[#1ed760]/10 text-[#1ed760] flex items-center justify-center mb-3 border border-[#1ed760]/30">
                   <Upload className="w-6 h-6" />
                 </div>
                 <span className={`text-sm font-semibold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
-                  {file ? file.name : 'Click to upload PDF, DOCX, TXT, or Image'}
+                  {file ? file.name : 'Click to upload PDF, DOCX, or TXT'}
                 </span>
                 <span className={`text-xs mt-1 ${isDarkMode ? 'text-[#b3b3b3]' : 'text-slate-500'}`}>Supports multimodal extraction with Gemma 3 4B</span>
               </label>
@@ -474,28 +516,45 @@ export const TransformationForm: React.FC<TransformationFormProps> = ({ onRunTra
           </div>
 
           <div className={`mt-8 pt-6 border-t flex items-center justify-between ${isDarkMode ? 'border-[#282828]' : 'border-slate-200'}`}>
-            <div className={`text-xs flex items-center space-x-2 ${isDarkMode ? 'text-[#b3b3b3]' : 'text-slate-500'}`}>
-              <Sparkles className="w-4 h-4 text-[#1ed760]" />
-              <span>Powered by Qwen3 4B & UCKR Consistency Engine (7-Step Pipeline)</span>
+            <div className="space-y-2">
+              <div className={`text-xs flex items-center space-x-2 ${isDarkMode ? 'text-[#b3b3b3]' : 'text-slate-500'}`}>
+                <Sparkles className="w-4 h-4 text-[#1ed760]" />
+                <span>Powered by Qwen3 4B & UCKR Consistency Engine (7-Step Pipeline)</span>
+              </div>
+              {formError && <p className="text-xs text-red-500">{formError}</p>}
             </div>
 
-            <button
-              type="submit"
-              disabled={isLoading || selectedOutputs.length === 0}
-              className="px-8 py-3 rounded-full bg-[#1ed760] hover:bg-[#1db954] text-black font-bold text-xs uppercase tracking-[1.5px] shadow-[0_8px_24px_rgba(30,215,96,0.3)] transition flex items-center space-x-2 disabled:opacity-50"
-            >
-              {isLoading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                  <span>Executing Pipeline...</span>
-                </>
-              ) : (
-                <>
-                  <span>TRANSFORM CONTENT</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
+            <div className="flex items-center space-x-3">
+              {isLoading && onCancel && (
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className="px-6 py-3 rounded-full bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/40 text-xs font-bold uppercase tracking-[1.5px] transition flex items-center space-x-2 cursor-pointer shadow-lg"
+                  title="Stop Execution"
+                >
+                  <Square className="w-4 h-4 fill-red-400" />
+                  <span>STOP</span>
+                </button>
               )}
-            </button>
+
+              <button
+                type="submit"
+                disabled={isLoading || selectedOutputs.length === 0}
+                className="px-8 py-3 rounded-full bg-[#1ed760] hover:bg-[#1db954] text-black font-bold text-xs uppercase tracking-[1.5px] shadow-[0_8px_24px_rgba(30,215,96,0.3)] transition flex items-center space-x-2 disabled:opacity-50"
+              >
+                {isLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                    <span>Executing Pipeline...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>TRANSFORM CONTENT</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </form>

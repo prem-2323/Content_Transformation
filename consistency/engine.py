@@ -60,9 +60,9 @@ class ConsistencyEngine:
         )
 
     @classmethod
-    def analyze(cls, source: NormalizedSource) -> UCKR:
+    def analyze(cls, source: NormalizedSource, use_llm: bool = True) -> UCKR:
         """Stage 3 & 4: Content Understanding & Common Knowledge Representation (UCKR)."""
-        uckr = analyze_source_and_build_uckr(source)
+        uckr = analyze_source_and_build_uckr(source, use_llm=use_llm)
         # Save version
         get_version_manager().save_version(uckr)
         # Register in central fact registry
@@ -73,27 +73,37 @@ class ConsistencyEngine:
     def generate_deliverables(
         cls,
         uckr: UCKR,
-        config: Optional[OutputGenerationConfig] = None
+        config: Optional[OutputGenerationConfig] = None,
+        use_llm: bool = True
     ) -> Dict[str, Any]:
         """
         Stage 5 through 18:
         Fact-Grounded Generation -> Provenance -> Multi-Validator -> Auto Repair.
+
+        Architecture:
+            UCKR (Common Knowledge Representation)
+              -> LinkedIn / Slides / Video (+ summary/twitter/advisory)
+              -> Consistency Check (audit + validation + repair)
+              -> Quality Score (6-dimension report)
         """
         cfg = config or OutputGenerationConfig()
         registry = get_or_create_registry(uckr)
 
         outputs: Dict[str, Any] = {}
 
+        # Sequential grounded generation keeps GPU memory stable on 4GB cards
+        # and preserves deterministic fallback ordering. Each generator already
+        # falls back instantly when use_llm=False or Ollama fails.
         for ot in cfg.output_types:
             ot_lower = ot.lower().strip()
             if ot_lower in ["summary", "executive_summary"]:
-                outputs["summary"] = SummaryGenerator.generate(uckr, cfg).model_dump()
+                outputs["summary"] = SummaryGenerator.generate(uckr, cfg, use_llm=use_llm).model_dump()
             elif ot_lower in ["linkedin", "linkedin_post"]:
-                outputs["linkedin"] = LinkedInGenerator.generate(uckr, cfg).model_dump()
+                outputs["linkedin"] = LinkedInGenerator.generate(uckr, cfg, use_llm=use_llm).model_dump()
             elif ot_lower in ["presentation", "slides", "pptx"]:
-                outputs["presentation"] = PresentationGenerator.generate(uckr, cfg).model_dump()
+                outputs["presentation"] = PresentationGenerator.generate(uckr, cfg, use_llm=use_llm).model_dump()
             elif ot_lower in ["video", "video_script", "storyboard"]:
-                outputs["video"] = VideoGenerator.generate(uckr, cfg).model_dump()
+                outputs["video"] = VideoGenerator.generate(uckr, cfg, use_llm=use_llm).model_dump()
             elif ot_lower in ["twitter", "x", "thread"]:
                 outputs["twitter"] = TwitterGenerator.generate(uckr, cfg).model_dump()
             elif ot_lower in ["advisory", "briefing"]:
@@ -124,6 +134,14 @@ class ConsistencyEngine:
             # Update audit
             audit_result = registry.audit_deliverables(outputs)
 
+        # Step 11b: Statement-level Evidence Traceability.
+        # Built from the verified English outputs BEFORE multilingual
+        # transformation, so every generated statement links to fact IDs,
+        # verbatim source statements, page/section references, confidence,
+        # and verification status in the source language.
+        from .provenance import ProvenanceTracker
+        evidence_trace = ProvenanceTracker.build_evidence_trace(uckr, outputs).model_dump()
+
         # Step 20: Multilingual Transformation if target language != English
         if cfg.language and cfg.language.strip().lower() not in ["english", "en"]:
             from .multilingual import MultilingualTransformer
@@ -150,7 +168,8 @@ class ConsistencyEngine:
             "consistency_audit": audit_result.model_dump(),
             "validation_report": validation_report.model_dump(),
             "repair_result": repair_result,
-            "quality_report": quality_report
+            "quality_report": quality_report,
+            "evidence_trace": evidence_trace
         }
 
     @classmethod
@@ -161,9 +180,14 @@ class ConsistencyEngine:
         raw_text: Optional[str] = None,
         url: Optional[str] = None,
         title: Optional[str] = None,
-        config: Optional[OutputGenerationConfig] = None
+        config: Optional[OutputGenerationConfig] = None,
+        use_llm: bool = True
     ) -> Dict[str, Any]:
-        """Full end-to-end processing pipeline."""
+        """Full end-to-end processing pipeline.
+
+        SOURCE -> Common Knowledge Representation (UCKR)
+          -> LinkedIn / Slides / Video -> Consistency Check -> Quality Score.
+        """
         # 1 & 2: Extract
         normalized_source = cls.extract(
             file_bytes=file_bytes,
@@ -174,10 +198,10 @@ class ConsistencyEngine:
         )
 
         # 3 & 4: Understand & Build UCKR
-        uckr = cls.analyze(normalized_source)
+        uckr = cls.analyze(normalized_source, use_llm=use_llm)
 
         # 5 through 22: Registry, Grounded Generation, Deep Validation, Auto Repair & Quality Scoring
-        generation_results = cls.generate_deliverables(uckr=uckr, config=config)
+        generation_results = cls.generate_deliverables(uckr=uckr, config=config, use_llm=use_llm)
 
         return {
             "status": "success",
@@ -187,5 +211,6 @@ class ConsistencyEngine:
             "consistency_audit": generation_results["consistency_audit"],
             "validation_report": generation_results.get("validation_report"),
             "repair_result": generation_results.get("repair_result"),
-            "quality_report": generation_results.get("quality_report")
+            "quality_report": generation_results.get("quality_report"),
+            "evidence_trace": generation_results.get("evidence_trace")
         }

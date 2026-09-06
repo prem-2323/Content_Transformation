@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle2, Loader2, Sparkles } from 'lucide-react';
+import { CheckCircle2, Loader2, Sparkles, Square, AlertOctagon } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface ProcessingViewProps {
   onComplete: () => void;
+  onCancel?: () => void;
 }
 
-export const ProcessingView: React.FC<ProcessingViewProps> = ({ onComplete }) => {
+export const ProcessingView: React.FC<ProcessingViewProps> = ({ onComplete, onCancel }) => {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isFinished, setIsFinished] = useState(false);
 
@@ -105,7 +106,7 @@ export const ProcessingView: React.FC<ProcessingViewProps> = ({ onComplete }) =>
         </div>
 
         {/* Steps List */}
-        <div className="mt-8 space-y-3 text-left max-h-[360px] overflow-y-auto pr-1">
+        <div className="mt-8 space-y-3 text-left max-h-[320px] overflow-y-auto pr-1 scrollbar-thin">
           {steps.map((step, idx) => {
             const isCompleted = idx < currentStepIndex || isFinished;
             const isCurrent = idx === currentStepIndex && !isFinished;
@@ -139,7 +140,21 @@ export const ProcessingView: React.FC<ProcessingViewProps> = ({ onComplete }) =>
             );
           })}
         </div>
+
+        {/* Stop Transformation Button */}
+        {!isFinished && onCancel && (
+          <div className="mt-6 pt-4 border-t border-[#282828] flex justify-center">
+            <button
+              onClick={onCancel}
+              className="px-6 py-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/40 text-red-400 hover:text-red-300 text-xs font-extrabold uppercase tracking-wider flex items-center space-x-2 transition cursor-pointer shadow-lg shadow-red-500/10 group"
+            >
+              <Square className="w-4 h-4 fill-red-400 group-hover:fill-red-300 transition" />
+              <span>Stop Transformation</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 };
+

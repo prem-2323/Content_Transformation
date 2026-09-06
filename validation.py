@@ -12,26 +12,56 @@ ALLOWED_OUTPUT_TYPES = {
     "advisory",
     "presentation",
     "video_script",
-    "infographic"
+    "infographic",
+    "email"
 }
 
 OUTPUT_TYPE_ALIASES = {
     "video": "video_script",
     "video_script": "video_script",
+    "video_storyboard": "video_script",
     "x": "twitter",
     "tweet": "twitter",
     "thread": "twitter",
+    "twitter_x_post": "twitter",
+    "twitter_x": "twitter",
+    "twitter_post": "twitter",
     "linkedin_post": "linkedin",
+    "linkedin": "linkedin",
     "executive_summary": "summary",
+    "executive": "summary",
     "summary_report": "summary",
+    "summary_brief": "summary",
     "powerpoint": "presentation",
     "ppt": "presentation",
     "deck": "presentation",
+    "presentation_(.pptx)": "presentation",
+    "advisory_memo": "advisory",
+    "advisory": "advisory",
+    "infographic_spec": "infographic",
+    "infographic": "infographic",
     "info": "infographic",
     "infographic_post": "infographic",
+    "email": "email",
+    "email_announcement": "email",
+    "email_newsletter": "email",
+    "newsletter": "email",
+    "email_broadcast": "email",
 }
 
 MAX_INPUT_TEXT_LENGTH = 50000
+
+
+def _canonicalize_output_token(raw_value: str) -> str:
+    """Lowercase, strip parenthetical qualifiers, and normalize separators."""
+    cleaned = raw_value.strip().lower()
+    # Drop parenthetical qualifiers like " (.pptx)" from display names
+    cleaned = re.sub(r"\s*\(.*?\)\s*", "", cleaned)
+    # Normalize separators (/, -, &) to underscores/spaces handling
+    cleaned = cleaned.replace("/", "_").replace("-", "_").replace("&", "and")
+    cleaned = re.sub(r"\s+", "_", cleaned.strip())
+    cleaned = re.sub(r"_+", "_", cleaned).strip("_")
+    return cleaned
 
 
 def normalize_output_type(raw_value: str) -> str:
@@ -39,7 +69,7 @@ def normalize_output_type(raw_value: str) -> str:
     if not isinstance(raw_value, str):
         raise HTTPException(status_code=400, detail="Invalid output type parameter.")
 
-    cleaned = raw_value.strip().lower().replace(" ", "_")
+    cleaned = _canonicalize_output_token(raw_value)
     if not cleaned:
         raise HTTPException(status_code=400, detail="Invalid output type parameter.")
 

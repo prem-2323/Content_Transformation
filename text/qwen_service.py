@@ -1,25 +1,59 @@
+import os
+
 import requests
 
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL_NAME = "qwen3:4b"
-REQUEST_TIMEOUT_SECONDS = 180
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
+MODEL_NAME = os.getenv("OLLAMA_MODEL", "qwen3:4b")
+# Default read timeout. Lowered from 180s so the Consistency Engine can fall
+# back to deterministic grounded generation instead of hanging the API.
+# Override with OLLAMA_TIMEOUT_SECONDS env var when a slower GPU needs more time.
+try:
+    REQUEST_TIMEOUT_SECONDS = float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "60"))
+except ValueError:
+    REQUEST_TIMEOUT_SECONDS = 60.0
 
 
 class QwenServiceError(Exception):
     """Raised when Ollama cannot complete a generation request."""
 
 
-def generate_with_qwen(prompt: str) -> str:
-    """Send generation prompt to local Ollama Qwen3 4B model."""
-    is_concise = "concise (quick read)" in prompt.lower()
+def _num_predict_for_prompt(prompt: str) -> int:
+    """Pick a tight token budget per task so consistency calls return faster."""
+    lowered = (prompt or "").lower()
+    if "concise (quick read)" in lowered:
+        return 500
+    if "linkedin" in lowered and "uckr" in lowered:
+        return 600
+    if "executive summary" in lowered and "uckr" in lowered:
+        return 600
+    if "storyboard" in lowered or "video producer" in lowered:
+        return 1000
+    if "presentation" in lowered or "slide deck" in lowered:
+        return 1000
+    if "translator" in lowered or "translate fluently" in lowered:
+        return 800
+    if "knowledge engineering" in lowered or "atomic facts" in lowered:
+        return 1200
+    return 1000
+
+
+def generate_with_qwen(prompt: str, timeout=None, num_predict=None) -> str:
+    """Send generation prompt to local Ollama Qwen3 4B model.
+
+    Keeps single-arg compatibility (existing tests monkeypatch with
+    ``def fake_qwen(prompt)``) while allowing optional overrides:
+    ``generate_with_qwen(prompt, timeout=20, num_predict=600)``.
+    """
+    read_timeout = float(timeout) if timeout else REQUEST_TIMEOUT_SECONDS
+    predict_n = int(num_predict) if num_predict else _num_predict_for_prompt(prompt)
     payload = {
         "model": MODEL_NAME,
         "prompt": prompt,
         "stream": False,
         "think": False,
         "options": {
-            "num_predict": 500 if is_concise else 1500
+            "num_predict": predict_n
         }
     }
 
@@ -27,7 +61,7 @@ def generate_with_qwen(prompt: str) -> str:
         response = requests.post(
             OLLAMA_URL,
             json=payload,
-            timeout=(3.0, REQUEST_TIMEOUT_SECONDS)
+            timeout=(3.0, read_timeout)
         )
         response.raise_for_status()
     except requests.exceptions.Timeout as error:

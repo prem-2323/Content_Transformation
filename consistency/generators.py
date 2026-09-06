@@ -16,7 +16,8 @@ from .schemas import (
     GroundedTwitter,
     TweetItem,
     GroundedAdvisory,
-    AdvisorySection
+    AdvisorySection,
+    ProvenanceItem
 )
 from .provenance import ProvenanceTracker
 
@@ -25,7 +26,10 @@ logger = logging.getLogger(__name__)
 
 def _clean_json(text: str) -> str:
     """Extract clean JSON substring from model output."""
-    t = text.strip()
+    if not text:
+        return ""
+    # Strip Qwen3 <think> reasoning traces first
+    t = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL | re.IGNORECASE).strip()
     if "```json" in t:
         t = t.split("```json", 1)[1]
         if "```" in t:
@@ -34,6 +38,13 @@ def _clean_json(text: str) -> str:
         t = t.split("```", 1)[1]
         if "```" in t:
             t = t.split("```", 1)[0]
+    t = t.strip()
+    # Extract outermost JSON object if prose surrounds it
+    if t and not t.startswith("{"):
+        start = t.find("{")
+        end = t.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            t = t[start:end + 1]
     return t.strip()
 
 
@@ -43,6 +54,105 @@ def _format_facts_block(uckr: UCKR) -> str:
     for f in uckr.facts:
         lines.append(f"[{f.id}] (Importance: {f.importance}) {f.statement} (Ref: {f.source_reference})")
     return "\n".join(lines)
+
+
+def _pages_for_fact_ids(fact_ids: List[str], uckr: UCKR) -> List[int]:
+    """Resolve source page numbers for a list of cited Fact IDs."""
+    facts_by_id = {f.id: f for f in uckr.facts}
+    pages: List[int] = []
+    for fid in fact_ids:
+        fact = facts_by_id.get(fid)
+        if fact:
+            p, _ = ProvenanceTracker.pages_and_sections_for_fact(fact)
+            pages.extend(p)
+    return sorted(set(pages)) or [1]
+
+
+def _to_provenance_item(evidence, text: str) -> ProvenanceItem:
+    """Convert a StatementEvidence record into a ProvenanceItem for embedding."""
+    return ProvenanceItem(
+        text_segment=text,
+        source_facts=evidence.source_facts,
+        source_pages=evidence.source_pages,
+        source_sections=evidence.source_sections,
+        confidence=evidence.confidence,
+        source_statements=evidence.source_statements,
+        verification=evidence.verification,
+    )
+
+
+def _attach_slide_evidence(slides: List[SlideItem], uckr: UCKR) -> List[ProvenanceItem]:
+    """Attach per-statement evidence + page numbers to every slide. Returns flattened evidence."""
+    flat: List[ProvenanceItem] = []
+    for slide in slides:
+        slide.source_pages = _pages_for_fact_ids(slide.source_facts, uckr)
+        container = f"slide_{slide.slide_number}"
+        items: List[ProvenanceItem] = []
+        parts = [("title", slide.title or "")] + [("bullet", b or "") for b in (slide.bullet_points or [])]
+        if slide.speaker_notes:
+            parts.append(("sentence", slide.speaker_notes))
+        for idx, (kind, text) in enumerate(parts):
+            if not text.strip():
+                continue
+            ev = ProvenanceTracker.evidence_for_statement(text, uckr, "presentation", container, idx, kind)
+            items.append(_to_provenance_item(ev, text.strip()))
+        slide.evidence = items
+        flat.extend(items)
+    return flat
+
+
+def _attach_scene_evidence(scenes: List[SceneItem], uckr: UCKR) -> List[ProvenanceItem]:
+    """Attach per-statement evidence + page numbers to every video scene. Returns flattened evidence."""
+    flat: List[ProvenanceItem] = []
+    for scene in scenes:
+        scene.source_pages = _pages_for_fact_ids(scene.source_facts, uckr)
+        container = f"scene_{scene.scene_number}"
+        items: List[ProvenanceItem] = []
+        if scene.narration and scene.narration.strip():
+            for i, sent in enumerate(ProvenanceTracker._split_statements(scene.narration)):
+                ev = ProvenanceTracker.evidence_for_statement(sent, uckr, "video", container, i, "narration")
+                items.append(_to_provenance_item(ev, sent))
+        if scene.on_screen_text and scene.on_screen_text.strip():
+            ev = ProvenanceTracker.evidence_for_statement(
+                scene.on_screen_text.strip(), uckr, "video", container, 0, "caption")
+            items.append(_to_provenance_item(ev, scene.on_screen_text.strip()))
+        scene.evidence = items
+        flat.extend(items)
+    return flat
+
+
+def _attach_tweet_evidence(thread: List[TweetItem], uckr: UCKR) -> List[ProvenanceItem]:
+    """Attach per-tweet evidence. Returns flattened evidence."""
+    flat: List[ProvenanceItem] = []
+    for tweet in thread:
+        container = f"tweet_{tweet.tweet_number}"
+        ev = ProvenanceTracker.evidence_for_statement(
+            tweet.text or "", uckr, "twitter", container, tweet.tweet_number, "tweet")
+        tweet.evidence = [_to_provenance_item(ev, (tweet.text or "").strip())] if (tweet.text or "").strip() else []
+        flat.extend(tweet.evidence)
+    return flat
+
+
+def _attach_advisory_evidence(
+    sections: List[AdvisorySection],
+    uckr: UCKR,
+    extra_texts: Optional[List[tuple]] = None,
+) -> List[ProvenanceItem]:
+    """Attach per-section evidence. extra_texts covers summary/analysis/actions. Returns flattened evidence."""
+    flat: List[ProvenanceItem] = []
+    for sec in sections:
+        container = f"section_{sec.heading}"
+        items: List[ProvenanceItem] = []
+        for i, sent in enumerate(ProvenanceTracker._split_statements(sec.content or "")):
+            ev = ProvenanceTracker.evidence_for_statement(sent, uckr, "advisory", container, i, "section")
+            items.append(_to_provenance_item(ev, sent))
+        sec.evidence = items
+        flat.extend(items)
+    for channel, container, text, kind, idx in (extra_texts or []):
+        for i, sent in enumerate(ProvenanceTracker._split_statements(text or "")):
+            ev = ProvenanceTracker.evidence_for_statement(sent, uckr, channel, container, idx + i, kind)
+            flat.append(_to_provenance_item(ev, sent))
+    return flat
 
 
 # ---------------------------------------------------------------------------
@@ -81,7 +191,7 @@ class SummaryGenerator:
     """Generates grounded executive summary from UCKR."""
 
     @staticmethod
-    def generate(uckr: UCKR, config: OutputGenerationConfig) -> GroundedSummary:
+    def generate(uckr: UCKR, config: OutputGenerationConfig, use_llm: bool = True) -> GroundedSummary:
         prompt = SUMMARY_PROMPT.format(
             facts_catalog=_format_facts_block(uckr),
             core_topic=uckr.core_topic,
@@ -90,22 +200,23 @@ class SummaryGenerator:
             detail_level=config.detail_level
         )
 
-        try:
-            raw = generate_with_qwen(prompt)
-            data = json.loads(_clean_json(raw))
-            if isinstance(data, dict) and "text" in data:
-                # Ensure valid fact IDs
-                valid_ids = [f.id for f in uckr.facts]
-                cited = [fid for fid in data.get("source_facts", []) if fid in valid_ids] or [f.id for f in uckr.facts[:3]]
-                summary_text = data["text"]
-                return GroundedSummary(
-                    text=summary_text,
-                    key_takeaways=data.get("key_takeaways", []),
-                    source_facts=cited,
-                    provenance=ProvenanceTracker.extract_provenance(summary_text, uckr)
-                )
-        except Exception as e:
-            logger.warning(f"SummaryGenerator LLM fallback: {e}")
+        if use_llm:
+            try:
+                raw = generate_with_qwen(prompt)
+                data = json.loads(_clean_json(raw))
+                if isinstance(data, dict) and "text" in data:
+                    # Ensure valid fact IDs
+                    valid_ids = [f.id for f in uckr.facts]
+                    cited = [fid for fid in data.get("source_facts", []) if fid in valid_ids] or [f.id for f in uckr.facts[:3]]
+                    summary_text = data["text"]
+                    return GroundedSummary(
+                        text=summary_text,
+                        key_takeaways=data.get("key_takeaways", []),
+                        source_facts=cited,
+                        provenance=ProvenanceTracker.extract_provenance(summary_text, uckr)
+                    )
+            except Exception as e:
+                logger.warning(f"SummaryGenerator LLM fallback: {e}")
 
         # Deterministic Grounded Fallback with Audience Calibration
         top_facts = sorted(uckr.facts, key=lambda x: x.importance, reverse=True)[:4]
@@ -165,7 +276,7 @@ class LinkedInGenerator:
     """Generates grounded LinkedIn post from UCKR tailored to audience."""
 
     @staticmethod
-    def generate(uckr: UCKR, config: OutputGenerationConfig) -> GroundedLinkedIn:
+    def generate(uckr: UCKR, config: OutputGenerationConfig, use_llm: bool = True) -> GroundedLinkedIn:
         prompt = LINKEDIN_PROMPT.format(
             facts_catalog=_format_facts_block(uckr),
             core_topic=uckr.core_topic,
@@ -173,23 +284,24 @@ class LinkedInGenerator:
             tone=config.tone
         )
 
-        try:
-            raw = generate_with_qwen(prompt)
-            data = json.loads(_clean_json(raw))
-            if isinstance(data, dict) and "headline" in data and "post_content" in data:
-                valid_ids = [f.id for f in uckr.facts]
-                cited = [fid for fid in data.get("source_facts", []) if fid in valid_ids] or [f.id for f in uckr.facts[:3]]
-                post_body = data["post_content"]
-                return GroundedLinkedIn(
-                    headline=data["headline"],
-                    post_content=post_body,
-                    hashtags=data.get("hashtags", ["#Innovation", "#Tech"]),
-                    call_to_action=data.get("call_to_action", "What are your thoughts on this?"),
-                    source_facts=cited,
-                    provenance=ProvenanceTracker.extract_provenance(post_body, uckr)
-                )
-        except Exception as e:
-            logger.warning(f"LinkedInGenerator LLM fallback: {e}")
+        if use_llm:
+            try:
+                raw = generate_with_qwen(prompt)
+                data = json.loads(_clean_json(raw))
+                if isinstance(data, dict) and "headline" in data and "post_content" in data:
+                    valid_ids = [f.id for f in uckr.facts]
+                    cited = [fid for fid in data.get("source_facts", []) if fid in valid_ids] or [f.id for f in uckr.facts[:3]]
+                    post_body = data["post_content"]
+                    return GroundedLinkedIn(
+                        headline=data["headline"],
+                        post_content=post_body,
+                        hashtags=data.get("hashtags", ["#Innovation", "#Tech"]),
+                        call_to_action=data.get("call_to_action", "What are your thoughts on this?"),
+                        source_facts=cited,
+                        provenance=ProvenanceTracker.extract_provenance(post_body, uckr)
+                    )
+            except Exception as e:
+                logger.warning(f"LinkedInGenerator LLM fallback: {e}")
 
         # Deterministic Grounded Fallback with Audience Tailoring
         top_facts = sorted(uckr.facts, key=lambda x: x.importance, reverse=True)[:3]
@@ -274,7 +386,7 @@ class PresentationGenerator:
     """Generates grounded presentation slides from UCKR."""
 
     @staticmethod
-    def generate(uckr: UCKR, config: OutputGenerationConfig) -> GroundedPresentation:
+    def generate(uckr: UCKR, config: OutputGenerationConfig, use_llm: bool = True) -> GroundedPresentation:
         prompt = PRESENTATION_PROMPT.format(
             facts_catalog=_format_facts_block(uckr),
             core_topic=uckr.core_topic,
@@ -282,35 +394,37 @@ class PresentationGenerator:
             audience=config.audience
         )
 
-        try:
-            raw = generate_with_qwen(prompt)
-            data = json.loads(_clean_json(raw))
-            if isinstance(data, dict) and "slides" in data and len(data["slides"]) > 0:
-                valid_ids = {f.id for f in uckr.facts}
-                slides: List[SlideItem] = []
-                all_facts_set = set()
+        if use_llm:
+            try:
+                raw = generate_with_qwen(prompt)
+                data = json.loads(_clean_json(raw))
+                if isinstance(data, dict) and "slides" in data and len(data["slides"]) > 0:
+                    valid_ids = {f.id for f in uckr.facts}
+                    slides: List[SlideItem] = []
+                    all_facts_set = set()
 
-                for s in data["slides"]:
-                    s_facts = [fid for fid in s.get("source_facts", []) if fid in valid_ids]
-                    all_facts_set.update(s_facts)
-                    slides.append(SlideItem(
-                        slide_number=s.get("slide_number", len(slides) + 1),
-                        title=s.get("title", f"Slide {len(slides) + 1}"),
-                        layout=s.get("layout", "bullet_points"),
-                        bullet_points=s.get("bullet_points", []),
-                        speaker_notes=s.get("speaker_notes", ""),
-                        visual_recommendation=s.get("visual_recommendation", ""),
-                        source_facts=s_facts
-                    ))
+                    for s in data["slides"]:
+                        s_facts = [fid for fid in s.get("source_facts", []) if fid in valid_ids]
+                        all_facts_set.update(s_facts)
+                        slides.append(SlideItem(
+                            slide_number=s.get("slide_number", len(slides) + 1),
+                            title=s.get("title", f"Slide {len(slides) + 1}"),
+                            layout=s.get("layout", "bullet_points"),
+                            bullet_points=s.get("bullet_points", []),
+                            speaker_notes=s.get("speaker_notes", ""),
+                            visual_recommendation=s.get("visual_recommendation", ""),
+                            source_facts=s_facts
+                        ))
 
-                return GroundedPresentation(
-                    presentation_title=data.get("presentation_title", uckr.core_topic),
-                    subtitle=data.get("subtitle", "Executive Knowledge Briefing"),
-                    slides=slides,
-                    source_facts=list(all_facts_set) or [f.id for f in uckr.facts[:4]]
-                )
-        except Exception as e:
-            logger.warning(f"PresentationGenerator LLM fallback: {e}")
+                    return GroundedPresentation(
+                        presentation_title=data.get("presentation_title", uckr.core_topic),
+                        subtitle=data.get("subtitle", "Executive Knowledge Briefing"),
+                        slides=slides,
+                        source_facts=list(all_facts_set) or [f.id for f in uckr.facts[:4]],
+                        evidence=_attach_slide_evidence(slides, uckr)
+                    )
+            except Exception as e:
+                logger.warning(f"PresentationGenerator LLM fallback: {e}")
 
         # Deterministic Grounded Fallback
         slides = [
@@ -347,7 +461,8 @@ class PresentationGenerator:
             presentation_title=uckr.core_topic,
             subtitle="Executive Knowledge Representation",
             slides=slides,
-            source_facts=list(dict.fromkeys(all_used_facts))
+            source_facts=list(dict.fromkeys(all_used_facts)),
+            evidence=_attach_slide_evidence(slides, uckr)
         )
 
 
@@ -397,7 +512,7 @@ class VideoGenerator:
     """Generates grounded video storyboard with Intelligent Video Planning from UCKR."""
 
     @staticmethod
-    def generate(uckr: UCKR, config: OutputGenerationConfig) -> GroundedVideo:
+    def generate(uckr: UCKR, config: OutputGenerationConfig, use_llm: bool = True) -> GroundedVideo:
         target_duration = float(config.video_duration or 30)
         # Optimal scene count: ~5 seconds per scene
         num_scenes = max(3, min(12, round(target_duration / 5.0)))
@@ -411,55 +526,56 @@ class VideoGenerator:
 
         valid_ids = {f.id for f in uckr.facts}
 
-        try:
-            raw = generate_with_qwen(prompt)
-            data = json.loads(_clean_json(raw))
-            if isinstance(data, dict) and "storyboard" in data and len(data["storyboard"]) >= 2:
-                raw_scenes = data["storyboard"][:num_scenes]
-                scenes: List[SceneItem] = []
-                all_facts_set = set()
-                curr_t = 0.0
+        if use_llm:
+            try:
+                raw = generate_with_qwen(prompt)
+                data = json.loads(_clean_json(raw))
+                if isinstance(data, dict) and "storyboard" in data and len(data["storyboard"]) >= 2:
+                    raw_scenes = data["storyboard"][:num_scenes]
+                    scenes: List[SceneItem] = []
+                    all_facts_set = set()
+                    curr_t = 0.0
 
-                for i, sc in enumerate(raw_scenes, start=1):
-                    sc_facts = [fid for fid in sc.get("source_facts", []) if fid in valid_ids]
-                    all_facts_set.update(sc_facts)
-                    dur = round(float(sc.get("duration_seconds", avg_dur)), 2)
-                    start_t = round(curr_t, 2)
-                    end_t = round(curr_t + dur, 2)
-                    curr_t = end_t
+                    for i, sc in enumerate(raw_scenes, start=1):
+                        sc_facts = [fid for fid in sc.get("source_facts", []) if fid in valid_ids]
+                        all_facts_set.update(sc_facts)
+                        dur = round(float(sc.get("duration_seconds", avg_dur)), 2)
+                        start_t = round(curr_t, 2)
+                        end_t = round(curr_t + dur, 2)
+                        curr_t = end_t
 
-                    imp = float(sc.get("visual_importance", 0.85 if i == 2 else 0.8))
-                    tier = "HIGH" if imp >= 0.85 else "MEDIUM"
-                    from video.planner import seconds_to_srt_timestamp
+                        imp = float(sc.get("visual_importance", 0.85 if i == 2 else 0.8))
+                        tier = "HIGH" if imp >= 0.85 else "MEDIUM"
+                        from video.planner import seconds_to_srt_timestamp
 
-                    scenes.append(SceneItem(
-                        scene_number=i,
-                        duration_seconds=int(round(dur)),
-                        visual_importance=imp,
-                        visual_tier=tier,
-                        visual_prompt=sc.get("visual_prompt", f"cinematic shot of {uckr.core_topic}"),
-                        narration=sc.get("narration", ""),
-                        on_screen_text=sc.get("on_screen_text", ""),
-                        start_time=start_t,
-                        end_time=end_t,
-                        transition_type="crossfade" if i < len(raw_scenes) else "fade",
-                        transition_duration=0.5 if i < len(raw_scenes) else 0.0,
-                        subtitle_start=seconds_to_srt_timestamp(start_t),
-                        subtitle_end=seconds_to_srt_timestamp(end_t),
-                        source_facts=sc_facts
-                    ))
+                        scenes.append(SceneItem(
+                            scene_number=i,
+                            duration_seconds=int(round(dur)),
+                            visual_importance=imp,
+                            visual_tier=tier,
+                            visual_prompt=sc.get("visual_prompt", f"cinematic shot of {uckr.core_topic}"),
+                            narration=sc.get("narration", ""),
+                            on_screen_text=sc.get("on_screen_text", ""),
+                            start_time=start_t,
+                            end_time=end_t,
+                            transition_type="crossfade" if i < len(raw_scenes) else "fade",
+                            transition_duration=0.5 if i < len(raw_scenes) else 0.0,
+                            subtitle_start=seconds_to_srt_timestamp(start_t),
+                            subtitle_end=seconds_to_srt_timestamp(end_t),
+                            source_facts=sc_facts
+                        ))
 
-                timeline = [
-                    {
-                        "scene_number": s.scene_number,
-                        "start_time": s.start_time,
-                        "end_time": s.end_time,
-                        "duration": s.duration_seconds,
-                        "visual_tier": s.visual_tier,
-                        "narration": s.narration
-                    }
-                    for s in scenes
-                ]
+                    timeline = [
+                        {
+                            "scene_number": s.scene_number,
+                            "start_time": s.start_time,
+                            "end_time": s.end_time,
+                            "duration": s.duration_seconds,
+                            "visual_tier": s.visual_tier,
+                            "narration": s.narration
+                        }
+                        for s in scenes
+                    ]
 
                 return GroundedVideo(
                     video_title=data.get("video_title", uckr.core_topic),
@@ -471,10 +587,11 @@ class VideoGenerator:
                         "target_duration": target_duration,
                         "scene_count": len(scenes),
                         "sync_status": "synchronized"
-                    }
+                    },
+                    evidence=_attach_scene_evidence(scenes, uckr)
                 )
-        except Exception as e:
-            logger.warning(f"VideoGenerator LLM fallback: {e}")
+            except Exception as e:
+                logger.warning(f"VideoGenerator LLM fallback: {e}")
 
         # Deterministic Grounded Intelligent Fallback
         scenes = []
@@ -580,7 +697,8 @@ class VideoGenerator:
                 "target_duration": target_duration,
                 "scene_count": len(scenes),
                 "sync_status": "synchronized"
-            }
+            },
+            evidence=_attach_scene_evidence(scenes, uckr)
         )
 
 
@@ -612,7 +730,8 @@ class TwitterGenerator:
         all_facts = [fid for tw in thread for fid in tw.source_facts]
         return GroundedTwitter(
             thread=thread,
-            source_facts=list(dict.fromkeys(all_facts))
+            source_facts=list(dict.fromkeys(all_facts)),
+            evidence=_attach_tweet_evidence(thread, uckr)
         )
 
 
@@ -640,15 +759,30 @@ class AdvisoryGenerator:
             )
         ]
 
+        executive_summary = f"Executive Advisory on {uckr.core_topic}. {uckr.summary}"
+        situation_analysis = f"Analysis based on {len(uckr.facts)} verified facts in {uckr.document.domain}."
+        recommended_actions = [
+            "Deploy proactive strategy based on core findings",
+            "Integrate continuous data-driven validation",
+            "Audit operational readiness across affected domains"
+        ]
         all_facts = [fid for sec in sections for fid in sec.source_facts]
-        return GroundedAdvisory(
-            executive_summary=f"Executive Advisory on {uckr.core_topic}. {uckr.summary}",
-            situation_analysis=f"Analysis based on {len(uckr.facts)} verified facts in {uckr.document.domain}.",
-            recommended_actions=[
-                "Deploy proactive strategy based on core findings",
-                "Integrate continuous data-driven validation",
-                "Audit operational readiness across affected domains"
+        evidence = _attach_advisory_evidence(
+            sections,
+            uckr,
+            extra_texts=[
+                ("advisory", "executive_summary", executive_summary, "sentence", 0),
+                ("advisory", "situation_analysis", situation_analysis, "sentence", 0),
+            ] + [
+                ("advisory", "recommended_actions", action, "action", i)
+                for i, action in enumerate(recommended_actions)
             ],
+        )
+        return GroundedAdvisory(
+            executive_summary=executive_summary,
+            situation_analysis=situation_analysis,
+            recommended_actions=recommended_actions,
             sections=sections,
-            source_facts=list(dict.fromkeys(all_facts))
+            source_facts=list(dict.fromkeys(all_facts)),
+            evidence=evidence
         )

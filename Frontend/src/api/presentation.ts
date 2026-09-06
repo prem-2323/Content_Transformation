@@ -45,10 +45,15 @@ export const presentationApi = {
   },
 
   exportPptxFile: async (formData: FormData) => {
+    // Backend returns the .pptx binary (same as /export-pptx), so fetch as blob.
     const res = await apiClient.post('/export-pptx-file', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      responseType: 'blob',
     });
-    return res.data;
+    return {
+      blob: res.data as Blob,
+      filename: getFilename(res.headers['content-disposition']) || 'presentation.pptx',
+    };
   }
 };
 

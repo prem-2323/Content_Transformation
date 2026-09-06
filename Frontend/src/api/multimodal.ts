@@ -1,26 +1,45 @@
 import { apiClient } from './client';
 
+export interface MultimodalJobSubmitResponse {
+  job_id: string;
+  status: string;
+}
+
+export interface MultimodalJobStatusResponse {
+  job_id: string;
+  status: string;
+  progress: number;
+  current_step: string;
+  step?: string;
+  result?: any;
+  error?: string | null;
+  created_at?: string;
+  completed_at?: string;
+  _isFallback?: boolean;
+}
+
 export const multimodalApi = {
-  transformPdf: async (formData: FormData) => {
-    const res = await apiClient.post('/multimodal/transform-pdf', formData, {
+  transformPdf: async (formData: FormData): Promise<MultimodalJobSubmitResponse> => {
+    const res = await apiClient.post<MultimodalJobSubmitResponse>('/multimodal/transform-pdf', formData, {
       timeout: 600000,
     });
-    return res.data; // Expected { job_id: string, status: string }
+    return res.data;
   },
 
-  getStatus: async (jobId: string) => {
-    const res = await apiClient.get(`/multimodal/status/${jobId}`, { timeout: 30000 });
+  getStatus: async (jobId: string): Promise<MultimodalJobStatusResponse> => {
+    const res = await apiClient.get<MultimodalJobStatusResponse>(`/multimodal/status/${jobId}`, { timeout: 30000 });
     const data = res.data;
     const isFallback = (res as any).statusText === 'OK (Fallback Mock)';
     const stepLabels: Record<string, string> = {
-      queued: 'Queued',
-      extracting_pdf: 'Extracting PDF',
-      analyzing_images: 'Analyzing images with Gemma',
-      analyzing_text: 'Understanding content',
-      generating_outputs: 'Generating outputs with Qwen',
-      consistency_check: 'Running consistency checks',
-      completed: 'Completed',
-      failed: 'Failed',
+      queued: 'Queued in background worker',
+      extracting_pdf: 'Extracting text & embedded images',
+      analyzing_images: 'Visual analysis with Gemma 3 4B',
+      analyzing_text: 'Structural text analysis with Qwen3 4B',
+      building_context: 'Assembling multimodal context',
+      generating_output: 'Synthesizing multi-channel deliverables',
+      parsing_results: 'Formatting final output deliverables',
+      completed: 'Transformation complete',
+      failed: 'Transformation failed',
     };
     return {
       ...data,

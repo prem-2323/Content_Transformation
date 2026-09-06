@@ -21,8 +21,23 @@ export const TranslationStudio: React.FC = () => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const res = await consistencyApi.translateContent({ text: sourceText, target_language: targetLang });
-      setTranslatedText(res.translated_text || res.result || JSON.stringify(res));
+      const pipeline = await consistencyApi.runPipeline({
+        text: sourceText,
+        output_types: 'summary,linkedin',
+      });
+      const res = await consistencyApi.translateContent({
+        target_language: targetLang,
+        uckr: pipeline.uckr,
+        outputs: pipeline.outputs,
+      });
+      const translatedOutputs = res.translated_outputs;
+      setTranslatedText(
+        translatedOutputs && typeof translatedOutputs === 'object'
+          ? Object.entries(translatedOutputs)
+              .map(([key, value]) => `${key}\n${typeof value === 'string' ? value : JSON.stringify(value, null, 2)}`)
+              .join('\n\n')
+          : res.translated_text || res.result || JSON.stringify(res)
+      );
     } catch (e: any) {
       setTranslatedText(`Error: ${e.message}`);
     } finally {

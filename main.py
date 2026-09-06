@@ -11,6 +11,7 @@ from multimodal.service import gemma_model as multimodal_gemma
 from image.routes import router as image_router
 from video.routes import router as video_router
 from consistency.routes import router as consistency_router
+from results.routes import router as results_router
 from ai_chat.routes import router as ai_chat_router
 
 
@@ -62,6 +63,7 @@ app.include_router(multimodal_router)
 app.include_router(image_router)
 app.include_router(video_router)
 app.include_router(consistency_router)
+app.include_router(results_router)
 app.include_router(ai_chat_router)
 
 
@@ -103,12 +105,17 @@ def root():
             "consistency_extract": "POST /consistency/extract",
             "consistency_analyze": "POST /consistency/analyze",
             "consistency_generate": "POST /consistency/generate",
+            "consistency_quality_score": "POST /consistency/quality-score",
+            "consistency_evidence": "POST /consistency/evidence",
+            "consistency_health": "GET /consistency/health",
             "consistency_registry": "GET /consistency/registry/{source_id}/facts",
             "generate_video": "POST /video/generate-video",
             "get_video": "GET /video/{filename}",
             "generate_image": "POST /generate-image",
             "docs": "/docs",
-        }
+        },
+        "consistency_architecture": "SOURCE -> Common Knowledge Representation (UCKR) -> LinkedIn/Slides/Video -> Consistency Check -> Quality Score",
+        "consistency_fast_mode": "Append ?fast=true to /consistency/analyze, /generate, /pipeline for instant deterministic fallback (no LLM wait)",
     }
 
 

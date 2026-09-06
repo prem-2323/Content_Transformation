@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, Trash2, Loader2, MessageSquare, Plus, Mic, MicOff, Volume2, Square, Paperclip } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useTheme } from '../context/ThemeContext';
+import { apiClient } from '../api/client';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -49,17 +50,15 @@ export const GeneralChatbot: React.FC = () => {
     setIsSending(true);
 
     try {
-      const res = await fetch('http://localhost:8000/api/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: newMessages })
-      });
-      const data = await res.json();
+      // Routed through apiClient so the configured backend base URL
+      // (Settings → API URL) and offline fallback handling apply here too.
+      const res = await apiClient.post('/api/ai/chat', { messages: newMessages }, { timeout: 180000 });
+      const data = res.data;
       const reply = data.reply || "I am here to assist with your content transformation tasks.";
       setMessages([...newMessages, { role: 'assistant', content: reply }]);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Chat error:", error);
-      setMessages([...newMessages, { role: 'assistant', content: "Could not reach the AI backend. Make sure Ollama is running and FastAPI is started on port 8000." }]);
+      setMessages([...newMessages, { role: 'assistant', content: error?.message || "Could not reach the AI backend. Make sure Ollama is running and FastAPI is started on port 8000." }]);
     } finally {
       setIsSending(false);
     }

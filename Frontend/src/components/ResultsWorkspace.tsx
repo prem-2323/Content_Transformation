@@ -1,8 +1,12 @@
-import React, { useState } from 'react';
-import { FileText, Copy, Download, Edit3, Check, Eye, ShieldCheck, DownloadCloud, Maximize2, X, Volume2, VolumeX, Square, Layers, BarChart3, Mail } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { FileText, Copy, Download, Edit3, Check, Eye, ShieldCheck, DownloadCloud, Maximize2, X, Volume2, VolumeX, Square, Layers, BarChart3, Mail, Presentation, Video, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { ContentIntelligence } from './ContentIntelligence';
 import { useTheme } from '../context/ThemeContext';
+import { resultsApi } from '../api/results';
+import { presentationApi } from '../api/presentation';
+import { videoApi } from '../api/video';
+import { audioApi } from '../api/audio';
 
 interface ResultsWorkspaceProps {
   transformationResult: any;
@@ -22,8 +26,9 @@ export const ResultsWorkspace: React.FC<ResultsWorkspaceProps> = ({ transformati
     "LinkedIn Post": "🚀 Professional LinkedIn post draft [F001] #AI #Innovation",
     "Advisory": "CONFIDENTIAL ADVISORY\n\nStrategic insights extracted [F001]."
   };
-  const outputs = Object.fromEntries(
-    Object.entries(rawOutputs).map(([key, value]) => [key, toDisplayText(value)])
+  const outputs = useMemo(
+    () => Object.fromEntries(Object.entries(rawOutputs).map(([key, value]) => [key, toDisplayText(value)])),
+    [rawOutputs]
   );
 
   const outputKeys = Object.keys(outputs);
@@ -35,6 +40,38 @@ export const ResultsWorkspace: React.FC<ResultsWorkspaceProps> = ({ transformati
   const [copiedItemKey, setCopiedItemKey] = useState<string | null>(null);
   const [isFullScreenOpen, setIsFullScreenOpen] = useState(false);
   const [speakingChannel, setSpeakingChannel] = useState<string | null>(null);
+  const [isExportingPresentation, setIsExportingPresentation] = useState(false);
+  const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
+  const [videoUrl, setVideoUrl] = useState('');
+  const [mediaError, setMediaError] = useState('');
+  const [mp3Tracks, setMp3Tracks] = useState<Record<string, { url?: string; filename?: string; loading: boolean; error?: string }>>({});
+
+  // MP3 voiceover add-ons requested on the Transform tab (POST /generate-audio on demand)
+  const mp3Addons: string[] = transformationResult?.mp3_addons || [];
+  const narrationSourceKey = outputKeys.find((k) => /summar/i.test(k)) || outputKeys[0] || '';
+  const narrationText = (outputs[narrationSourceKey] || '').slice(0, 1800);
+
+  const handleGenerateMp3 = async (addon: string) => {
+    if (!narrationText.trim()) {
+      setMp3Tracks((prev) => ({ ...prev, [addon]: { loading: false, error: 'No narration text available.' } }));
+      return;
+    }
+    setMp3Tracks((prev) => ({ ...prev, [addon]: { loading: true } }));
+    try {
+      const res = await audioApi.generateAudio({ text: narrationText.trim(), voice: 'en-US-AriaNeural' });
+      const url = audioApi.getAudioUrl(res.filename || (res as any).download_url || (res as any).url || '');
+      setMp3Tracks((prev) => ({ ...prev, [addon]: { url, filename: res.filename, loading: false } }));
+    } catch (error) {
+      setMp3Tracks((prev) => ({
+        ...prev,
+        [addon]: { loading: false, error: error instanceof Error ? error.message : 'MP3 synthesis failed.' },
+      }));
+    }
+  };
+
+  React.useEffect(() => {
+    setActiveChannel(outputKeys[0] || "Executive Summary");
+  }, [transformationResult]);
 
   // Update edited content when channel changes
   React.useEffect(() => {
@@ -104,40 +141,76 @@ export const ResultsWorkspace: React.FC<ResultsWorkspaceProps> = ({ transformati
     document.body.removeChild(element);
   };
 
-  const handleDownloadAll = () => {
-    let combined = `# Synthetix AI - Aggregated Multi-Channel Deliverables\nGenerated via Unified Content Knowledge Representation (UCKR)\n\n`;
-    Object.entries(outputs).forEach(([title, content]) => {
-      combined += `\n\n---\n# CHANNEL: ${title}\n---\n\n${content}\n`;
-    });
+  const downloadBlob = (blob: Blob, filename: string) => {
     const element = document.createElement("a");
-    const file = new Blob([combined], { type: 'text/markdown' });
-    element.href = URL.createObjectURL(file);
-    element.download = `synthetix_all_deliverables.md`;
+    element.href = URL.createObjectURL(blob);
+    element.download = filename;
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
+    URL.revokeObjectURL(element.href);
   };
 
-  const handleStructuredMarkdownExport = () => {
-    const frontmatter = `---
-title: "${activeChannel}"
-date: "${new Date().toISOString().split('T')[0]}"
-author: "Synthetix AI Content Intelligence Engine"
-pipeline: "Unified Content Knowledge Representation (UCKR)"
-consistency_score: ${validationReport.overall_score}%
-fact_attributions: ["F001", "F002", "F003"]
-tags: ["documentation", "synthetix", "ai-generated", "${activeChannel.toLowerCase().replace(/\s+/g, '-')}"]
----
+  const handleExportPresentation = async () => {
+    setMediaError('');
+    setIsExportingPresentation(true);
+    try {
+      const sourceText = Object.entries(outputs)
+        .map(([title, content]) => `${title}\n${content}`)
+        .join('\n\n');
+      const result = await presentationApi.exportPptx({
+        text: sourceText,
+        audience: 'Executives',
+        tone: 'Professional',
+        language: 'English',
+        objective: 'Inform',
+      });
+      downloadBlob(result.blob, result.filename);
+    } catch (error) {
+      setMediaError(error instanceof Error ? error.message : 'Presentation export failed.');
+    } finally {
+      setIsExportingPresentation(false);
+    }
+  };
 
-`;
-    const structuredContent = frontmatter + editedContent + `\n\n---\n*Exported from Synthetix AI Content Intelligence Workspace*`;
-    const element = document.createElement("a");
-    const file = new Blob([structuredContent], { type: 'text/markdown;charset=utf-8' });
-    element.href = URL.createObjectURL(file);
-    element.download = `${activeChannel.toLowerCase().replace(/\s+/g, '_')}_structured.md`;
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
+  const handleGenerateVideo = async () => {
+    setMediaError('');
+    setVideoUrl('');
+    setIsGeneratingVideo(true);
+    try {
+      const result = await videoApi.generateVideo({
+        text: editedContent,
+        target_duration: 30,
+        pacing: 'balanced',
+        language: 'English',
+        tone: 'Professional',
+        audience: 'General public',
+      });
+      setVideoUrl(videoApi.getVideoUrl(result.video_file));
+    } catch (error) {
+      setMediaError(error instanceof Error ? error.message : 'Video generation failed.');
+    } finally {
+      setIsGeneratingVideo(false);
+    }
+  };
+
+  const handleDownloadAll = async () => {
+    const result = await resultsApi.export({
+      outputs,
+      validation_report: validationReport,
+      format: 'all',
+    });
+    downloadBlob(result.blob, result.filename);
+  };
+
+  const handleStructuredMarkdownExport = async () => {
+    const result = await resultsApi.export({
+      outputs: { [activeChannel]: editedContent },
+      active_channel: activeChannel,
+      validation_report: validationReport,
+      format: 'structured',
+    });
+    downloadBlob(result.blob, result.filename);
   };
 
   const handleSendViaGmail = () => {
@@ -225,6 +298,85 @@ tags: ["documentation", "synthetix", "ai-generated", "${activeChannel.toLowerCas
         </div>
       </div>
 
+      <div className={`mb-6 rounded-2xl border p-4 ${isDarkMode ? 'border-[#282828] bg-[#181818]/70' : 'border-slate-200 bg-white'}`}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-sm font-bold">Transform this report further</h3>
+            <p className={`text-xs mt-1 ${isDarkMode ? 'text-[#b3b3b3]' : 'text-slate-600'}`}>
+              Export a presentation or generate a 30-second video from the deliverables above.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleExportPresentation}
+              disabled={isExportingPresentation}
+              className="px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-wider flex items-center gap-2 bg-[#1ed760] text-black disabled:opacity-60"
+            >
+              {isExportingPresentation ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Presentation className="w-3.5 h-3.5" />}
+              <span>{isExportingPresentation ? 'Exporting' : 'Export Presentation'}</span>
+            </button>
+            <button
+              onClick={handleGenerateVideo}
+              disabled={isGeneratingVideo}
+              className={`px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-wider flex items-center gap-2 border disabled:opacity-60 ${isDarkMode ? 'border-[#4d4d4d] text-white bg-[#121212]' : 'border-slate-300 text-slate-800 bg-white'}`}
+            >
+              {isGeneratingVideo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Video className="w-3.5 h-3.5 text-[#1ed760]" />}
+              <span>{isGeneratingVideo ? 'Generating Video' : 'Generate Video'}</span>
+            </button>
+          </div>
+        </div>
+        {isGeneratingVideo && <p className="mt-3 text-xs text-amber-500">Video generation may take several minutes while images, narration, and subtitles are created.</p>}
+        {mediaError && <p className="mt-3 text-xs text-red-400">{mediaError}</p>}
+        {videoUrl && (
+          <a href={videoUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-xs font-semibold text-[#1ed760] underline">
+            Open generated video
+          </a>
+        )}
+      </div>
+
+      {mp3Addons.length > 0 && (
+        <div className={`mb-6 rounded-2xl border p-4 ${isDarkMode ? 'border-[#282828] bg-[#181818]/70' : 'border-slate-200 bg-white'}`}>
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-sm font-bold">MP3 Voiceover Add-ons</h3>
+              <p className={`text-xs mt-1 ${isDarkMode ? 'text-[#b3b3b3]' : 'text-slate-600'}`}>
+                Requested on the Transform tab — synthesized on demand from “{narrationSourceKey || 'summary'}” via POST /generate-audio.
+              </p>
+            </div>
+          </div>
+          <div className="mt-3 space-y-2">
+            {mp3Addons.map((addon) => {
+              const track = mp3Tracks[addon];
+              return (
+                <div key={addon} className={`flex flex-col gap-2 rounded-xl border p-3 sm:flex-row sm:items-center sm:justify-between ${isDarkMode ? 'border-[#282828] bg-[#121212]' : 'border-slate-200 bg-slate-50'}`}>
+                  <span className="text-xs font-semibold">{addon}</span>
+                  <div className="flex items-center gap-2">
+                    {track?.url ? (
+                      <>
+                        <audio controls src={track.url} className="h-8 w-56" />
+                        <a href={track.url} download={track.filename || 'generated_audio.mp3'} className="px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-[#1ed760] text-black">
+                          Download
+                        </a>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => handleGenerateMp3(addon)}
+                        disabled={track?.loading}
+                        className="px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider flex items-center gap-2 bg-[#1ed760] text-black disabled:opacity-60"
+                      >
+                        {track?.loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Volume2 className="w-3.5 h-3.5" />}
+                        <span>{track?.loading ? 'Synthesizing' : 'Generate MP3'}</span>
+                      </button>
+                    )}
+                  </div>
+                  {track?.error && <p className="text-xs text-red-400 sm:basis-full">{track.error}</p>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Sub-Tabs: Deliverables vs Content Intelligence & Consistency Engine */}
       <div className="flex items-center justify-center space-x-2 mb-8 border-b pb-4 overflow-x-auto">
         <button
@@ -254,7 +406,7 @@ tags: ["documentation", "synthetix", "ai-generated", "${activeChannel.toLowerCas
 
       {workspaceSubTab === 'intelligence' ? (
         <div className="mt-4">
-          <ContentIntelligence transformationResult={transformationResult} isDarkMode={isDarkMode} />
+          <ContentIntelligence transformationResult={transformationResult} />
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">

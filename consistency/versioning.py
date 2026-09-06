@@ -90,7 +90,8 @@ class UCKRVersionManager:
         uckr_v2: UCKR,
         diff: UCKRDiff,
         previous_outputs: Dict[str, Any],
-        config: Optional[OutputGenerationConfig] = None
+        config: Optional[OutputGenerationConfig] = None,
+        use_llm: bool = True
     ) -> SelectiveRegenerationResponse:
         """
         Regenerate ONLY the channels and sections affected by changed/added/deleted facts.
@@ -117,13 +118,13 @@ class UCKRVersionManager:
             if ch_used_facts & affected_set or not ch_used_facts:
                 affected_channels.append(ch_name)
                 if ch_name == "summary":
-                    updated_outputs["summary"] = SummaryGenerator.generate(uckr_v2, cfg).model_dump()
+                    updated_outputs["summary"] = SummaryGenerator.generate(uckr_v2, cfg, use_llm=use_llm).model_dump()
                 elif ch_name == "linkedin":
-                    updated_outputs["linkedin"] = LinkedInGenerator.generate(uckr_v2, cfg).model_dump()
+                    updated_outputs["linkedin"] = LinkedInGenerator.generate(uckr_v2, cfg, use_llm=use_llm).model_dump()
                 elif ch_name == "presentation":
-                    updated_outputs["presentation"] = PresentationGenerator.generate(uckr_v2, cfg).model_dump()
+                    updated_outputs["presentation"] = PresentationGenerator.generate(uckr_v2, cfg, use_llm=use_llm).model_dump()
                 elif ch_name == "video":
-                    updated_outputs["video"] = VideoGenerator.generate(uckr_v2, cfg).model_dump()
+                    updated_outputs["video"] = VideoGenerator.generate(uckr_v2, cfg, use_llm=use_llm).model_dump()
                 elif ch_name == "twitter":
                     updated_outputs["twitter"] = TwitterGenerator.generate(uckr_v2, cfg).model_dump()
                 elif ch_name == "advisory":
