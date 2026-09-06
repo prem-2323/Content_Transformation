@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { apiClient, getApiBaseUrl } from './client';
 
 export interface GenerateImageRequest {
   prompt: string;
@@ -27,7 +27,7 @@ export const imageApi = {
   },
 
   getImageUrl: (filename: string) => {
-    const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+    const base = getApiBaseUrl() || 'http://localhost:8000';
     return `${base}/image/${filename}`;
   }
 };

@@ -96,6 +96,11 @@ export const ImageStudio: React.FC = () => {
             {isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
             <span>Generate Image</span>
           </button>
+              {error && (
+                <p role="alert" className="text-xs text-red-400" aria-live="polite">
+                  {error}
+                </p>
+              )}
         </form>
 
         <div className={`rounded-2xl border p-6 shadow-xl flex flex-col items-center justify-center ${
