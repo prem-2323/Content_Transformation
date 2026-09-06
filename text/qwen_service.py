@@ -12,13 +12,14 @@ class QwenServiceError(Exception):
 
 def generate_with_qwen(prompt: str) -> str:
     """Send generation prompt to local Ollama Qwen3 4B model."""
+    is_concise = "concise (quick read)" in prompt.lower()
     payload = {
         "model": MODEL_NAME,
         "prompt": prompt,
         "stream": False,
         "think": False,
         "options": {
-            "num_predict": 1500
+            "num_predict": 500 if is_concise else 1500
         }
     }
 

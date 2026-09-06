@@ -29,6 +29,7 @@ import { doc, setDoc } from 'firebase/firestore';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { db, auth } from './lib/firebase';
 import { useTheme } from './context/ThemeContext';
+import { transformApi } from './api/transform';
 
 export default function App() {
   const { isDarkMode } = useTheme();
@@ -37,6 +38,7 @@ export default function App() {
   const [user, setUser] = useState<any>(null);
   const [transformationResult, setTransformationResult] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [transformError, setTransformError] = useState<string | null>(null);
   const [isDocsOpen, setIsDocsOpen] = useState(false);
   const [loadedSession, setLoadedSession] = useState<any>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -64,16 +66,10 @@ export default function App() {
 
   const handleRunTransform = async (payload: any, isFile: boolean) => {
     setIsLoading(true);
+    setTransformError(null);
     try {
-      let endpoint = '/api/transform';
-      let options: RequestInit = {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      };
-
+      let data;
       if (isFile) {
-        endpoint = '/api/transform-file';
         const formData = new FormData();
         formData.append('file', payload.file);
         formData.append('audience', payload.audience);
@@ -84,14 +80,10 @@ export default function App() {
         if (payload.output_types) {
           formData.append('output_types', payload.output_types.join(','));
         }
-        options = {
-          method: 'POST',
-          body: formData
-        };
+        data = await transformApi.transformFile(formData);
+      } else {
+        data = await transformApi.transformText(payload);
       }
-
-      const res = await fetch(endpoint, options);
-      const data = await res.json();
       setTransformationResult(data);
 
       // Save to localStorage history
@@ -123,6 +115,7 @@ export default function App() {
       setActiveTab('processing');
     } catch (error) {
       console.error("Transformation error:", error);
+      setTransformError(error instanceof Error ? error.message : 'Transformation failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -209,6 +202,12 @@ export default function App() {
             />
 
             <main className="main-content flex-1 min-w-0 h-full overflow-y-auto overflow-x-hidden">
+              {transformError && (
+                <div className="mx-auto mt-4 max-w-6xl rounded-lg border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+                  {transformError} Please reduce the number of selected outputs and try again.
+                </div>
+              )}
+
               {activeTab === 'transform' && (
                 <TransformationForm
                   onRunTransform={handleRunTransform}
