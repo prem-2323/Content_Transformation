@@ -9,8 +9,9 @@ export const multimodalApi = {
   },
 
   getStatus: async (jobId: string) => {
-    const res = await apiClient.get(`/multimodal/status/${jobId}`);
+    const res = await apiClient.get(`/multimodal/status/${jobId}`, { timeout: 30000 });
     const data = res.data;
+    const isFallback = (res as any).statusText === 'OK (Fallback Mock)';
     const stepLabels: Record<string, string> = {
       queued: 'Queued',
       extracting_pdf: 'Extracting PDF',
@@ -25,6 +26,7 @@ export const multimodalApi = {
       ...data,
       step: stepLabels[data.current_step] || data.current_step,
       ...(data.result || {}),
+      _isFallback: isFallback,
     };
   }
 };

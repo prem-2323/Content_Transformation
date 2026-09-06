@@ -8,59 +8,73 @@ export const ApiExplorer: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   
-  const endpoints = [
+  interface ExplorerEndpoint {
+    category: string;
+    method: 'GET' | 'POST';
+    path: string;
+    desc: string;
+    defaultPayload: any;
+    needsFile?: boolean;
+    fileField?: string;
+    fileAccept?: string;
+    demoFilename?: string;
+    timeout?: number;
+  }
+
+  const endpoints: ExplorerEndpoint[] = [
     // TEXT TRANSFORMATION
-    { category: 'TEXT TRANSFORMATION', method: 'POST', path: '/transform', desc: 'Transform direct text input into selected output formats', defaultPayload: { text: "AI is transforming enterprise productivity.", output_types: ["Summary", "LinkedIn"], audience: "Professionals", tone: "Formal", language: "English", detail_level: "Medium", objective: "Inform" } },
-    { category: 'TEXT TRANSFORMATION', method: 'POST', path: '/transform-file', desc: 'Transform uploaded document file content', defaultPayload: { audience: "Professionals", tone: "Formal", language: "English" } },
-    
+    { category: 'TEXT TRANSFORMATION', method: 'POST', path: '/transform', desc: 'Transform direct text input into selected output formats', defaultPayload: { text: "AI is transforming enterprise productivity.", output_types: ["summary", "linkedin"], audience: "Professionals", tone: "Formal", language: "English", detail_level: "Medium", objective: "Inform" }, timeout: 180000 },
+    { category: 'TEXT TRANSFORMATION', method: 'POST', path: '/transform-file', desc: 'Transform uploaded document (TXT/PDF/DOCX) — needs file + output_types form fields', defaultPayload: { output_types: "summary,linkedin", audience: "Professionals", tone: "Formal", language: "English", detail_level: "Medium", objective: "Inform" }, needsFile: true, fileField: 'file', fileAccept: '.txt,.pdf,.docx', timeout: 180000 },
+
     // MULTIMODAL
-    { category: 'MULTIMODAL', method: 'POST', path: '/multimodal/transform-pdf', desc: 'Upload PDF for multi-model PDF transformation pipeline', defaultPayload: { audience: "Professionals", tone: "Analytical" } },
+    { category: 'MULTIMODAL', method: 'POST', path: '/multimodal/transform-pdf', desc: 'Upload PDF for multimodal pipeline (submit → poll status) — needs PDF file', defaultPayload: { output_type: "summary", audience: "Professionals", tone: "Analytical" }, needsFile: true, fileField: 'file', fileAccept: '.pdf', timeout: 60000 },
     { category: 'MULTIMODAL', method: 'GET', path: '/multimodal/status/{job_id}', desc: 'Poll status of long-running PDF transformation job', defaultPayload: {} },
 
     // VISUAL AI
-    { category: 'VISUAL AI', method: 'POST', path: '/visual/analyze', desc: 'Analyze uploaded image using Gemma visual intelligence', defaultPayload: {} },
+    { category: 'VISUAL AI', method: 'POST', path: '/visual/analyze', desc: 'Analyze uploaded image using Gemma (field: image + task + prompt)', defaultPayload: { task: "description", prompt: "Analyze this image" }, needsFile: true, fileField: 'image', fileAccept: 'image/*', timeout: 120000 },
 
     // IMAGE GENERATION
-    { category: 'IMAGE GENERATION', method: 'POST', path: '/generate-image', desc: 'Generate high-res image from prompt', defaultPayload: { prompt: "Futuristic sustainable smart city at sunset", width: 1024, height: 1024, steps: 30 } },
-    { category: 'IMAGE GENERATION', method: 'POST', path: '/generate-scene-images', desc: 'Generate storyboard scene images', defaultPayload: { scenes: [{ prompt: "Scene 1 overview" }] } },
-    { category: 'IMAGE GENERATION', method: 'POST', path: '/generate-scene-images-from-file', desc: 'Generate scene images from script file', defaultPayload: {} },
-    { category: 'IMAGE GENERATION', method: 'GET', path: '/image/{filename}', desc: 'Serve generated image file', defaultPayload: {} },
+    { category: 'IMAGE GENERATION', method: 'POST', path: '/generate-image', desc: 'Generate high-res image from prompt', defaultPayload: { prompt: "Futuristic sustainable smart city at sunset", width: 512, height: 512, steps: 20 }, timeout: 180000 },
+    { category: 'IMAGE GENERATION', method: 'POST', path: '/generate-scene-images', desc: 'Generate storyboard scene images from text or video-script object', defaultPayload: { script: "A futuristic smart city using artificial intelligence, doctors using AI diagnostics in a modern hospital" }, timeout: 300000 },
+    { category: 'IMAGE GENERATION', method: 'POST', path: '/generate-scene-images-from-file', desc: 'Generate scene images from TXT/PDF/DOCX upload — needs file', defaultPayload: {}, needsFile: true, fileField: 'file', fileAccept: '.txt,.pdf,.docx', timeout: 300000 },
+    { category: 'IMAGE GENERATION', method: 'GET', path: '/image/{filename}', desc: 'Serve generated image file', defaultPayload: {}, demoFilename: 'demo.png' },
 
     // VIDEO
-    { category: 'VIDEO', method: 'POST', path: '/video/plan', desc: 'Plan video storyboard and scene breakdown', defaultPayload: { content: "Explain quantum computing in simple terms." } },
-    { category: 'VIDEO', method: 'POST', path: '/video/generate-video', desc: 'Generate complete MP4 video with narration and subtitles', defaultPayload: { script: "Quantum computing video script" } },
-    { category: 'VIDEO', method: 'GET', path: '/video/{filename}', desc: 'Serve generated MP4 video file', defaultPayload: {} },
+    { category: 'VIDEO', method: 'POST', path: '/video/plan', desc: 'Plan video storyboard and scene breakdown', defaultPayload: { text: "Explain quantum computing in simple terms for a 30 second educational video.", target_duration: 30, pacing: "balanced" }, timeout: 180000 },
+    { category: 'VIDEO', method: 'POST', path: '/video/generate-video', desc: 'Generate complete MP4 video with narration and subtitles (takes minutes, needs Forge + ffmpeg)', defaultPayload: { text: "Artificial intelligence is transforming modern cities with smarter healthcare, transport and energy for a 30 second video.", target_duration: 30 }, timeout: 600000 },
+    { category: 'VIDEO', method: 'GET', path: '/video/{filename}', desc: 'Serve generated MP4 video file', defaultPayload: {}, demoFilename: 'demo.mp4' },
 
     // AUDIO
     { category: 'AUDIO', method: 'GET', path: '/audio-voices', desc: 'List available Edge TTS / neural voice models', defaultPayload: {} },
-    { category: 'AUDIO', method: 'POST', path: '/generate-audio', desc: 'Generate MP3 audio from text and voice', defaultPayload: { text: "Welcome to AI Studio.", voice: "en-US-AriaNeural" } },
-    { category: 'AUDIO', method: 'POST', path: '/generate-video-audio', desc: 'Generate audio track for video script', defaultPayload: {} },
-    { category: 'AUDIO', method: 'GET', path: '/audio/{filename}', desc: 'Serve generated MP3 audio file', defaultPayload: {} },
+    { category: 'AUDIO', method: 'POST', path: '/generate-audio', desc: 'Generate MP3 audio from text and voice', defaultPayload: { text: "Welcome to AI Studio.", voice: "en-US-AriaNeural" }, timeout: 120000 },
+    { category: 'AUDIO', method: 'POST', path: '/generate-video-audio', desc: 'Generate audio track for video script', defaultPayload: { video_script: { storyboard: [{ narration: "Welcome to AI Studio. This is scene one." }] }, voice: "en-US-AriaNeural" }, timeout: 120000 },
+    { category: 'AUDIO', method: 'GET', path: '/audio/{filename}', desc: 'Serve generated MP3 audio file', defaultPayload: {}, demoFilename: 'demo.mp3' },
 
     // PRESENTATION
-    { category: 'PRESENTATION', method: 'POST', path: '/export-pptx', desc: 'Export structured PowerPoint presentation', defaultPayload: { title: "AI Strategy 2026", slides: [{ title: "Overview", points: ["Point 1"] }] } },
-    { category: 'PRESENTATION', method: 'POST', path: '/export-pptx-file', desc: 'Export PPTX from source file', defaultPayload: {} },
+    { category: 'PRESENTATION', method: 'POST', path: '/export-pptx', desc: 'Export PowerPoint from source text (TextRequest shape)', defaultPayload: { text: "AI Strategy 2026: overview, market insights, roadmap and outcomes.", audience: "Executives", tone: "Professional", language: "English", detail_level: "Medium", objective: "Inform" }, timeout: 180000 },
+    { category: 'PRESENTATION', method: 'POST', path: '/export-pptx-file', desc: 'Export PPTX from TXT/PDF/DOCX upload — needs file', defaultPayload: { audience: "Executives", tone: "Professional", language: "English" }, needsFile: true, fileField: 'file', fileAccept: '.txt,.pdf,.docx', timeout: 180000 },
 
     // CONSISTENCY
-    { category: 'CONSISTENCY', method: 'POST', path: '/consistency/extract', desc: 'Extract atomic facts from source text', defaultPayload: { text: "Company revenue reached $50M in Q4." } },
-    { category: 'CONSISTENCY', method: 'POST', path: '/consistency/analyze', desc: 'Analyze semantic consistency across outputs', defaultPayload: {} },
-    { category: 'CONSISTENCY', method: 'GET', path: '/consistency/registry/{source_id}/facts', desc: 'Get fact registry for source ID', defaultPayload: {} },
-    { category: 'CONSISTENCY', method: 'POST', path: '/consistency/generate', desc: 'Generate grounded deliverables with fact IDs', defaultPayload: {} },
-    { category: 'CONSISTENCY', method: 'POST', path: '/consistency/pipeline', desc: 'Run complete 7-step consistency pipeline', defaultPayload: { text: "AI transformation roadmap." } },
-    { category: 'CONSISTENCY', method: 'POST', path: '/consistency/quality-score', desc: 'Calculate 6-dimension quality score', defaultPayload: { text: "AI content evaluation text." } },
-    { category: 'CONSISTENCY', method: 'POST', path: '/consistency/translate', desc: 'Translate grounded deliverables across languages', defaultPayload: { text: "Hello world", target_language: "Hindi" } },
+    { category: 'CONSISTENCY', method: 'POST', path: '/consistency/extract', desc: 'Extract normalized source from raw_text (or multipart file)', defaultPayload: { raw_text: "Company revenue reached $50M in Q4 with 20% growth." }, timeout: 60000 },
+    { category: 'CONSISTENCY', method: 'POST', path: '/consistency/analyze', desc: 'Analyze raw_text into UCKR facts', defaultPayload: { raw_text: "Company revenue reached $50M in Q4 with 20% growth." }, timeout: 180000 },
+    { category: 'CONSISTENCY', method: 'GET', path: '/consistency/registry/{source_id}/facts', desc: 'Get fact registry for source ID (analyze a source first)', defaultPayload: {} },
+    { category: 'CONSISTENCY', method: 'POST', path: '/consistency/generate', desc: 'Generate grounded deliverables — needs UCKR from /analyze', defaultPayload: { uckr: null, config: { output_types: ["summary"] } } },
+    { category: 'CONSISTENCY', method: 'POST', path: '/consistency/pipeline', desc: 'Run complete 7-step consistency pipeline', defaultPayload: { text: "AI transformation roadmap for enterprise productivity.", output_types: "summary,linkedin" }, timeout: 300000 },
+    { category: 'CONSISTENCY', method: 'POST', path: '/consistency/quality-score', desc: 'Calculate 6-dimension quality score', defaultPayload: { text: "AI content evaluation text for quality scoring." }, timeout: 60000 },
+    { category: 'CONSISTENCY', method: 'POST', path: '/consistency/translate', desc: 'Translate grounded outputs (needs outputs + target_language)', defaultPayload: { target_language: "Hindi", outputs: { summary: "AI is transforming enterprise productivity." } } },
     { category: 'CONSISTENCY', method: 'GET', path: '/consistency/languages', desc: 'List supported translation languages', defaultPayload: {} },
 
     // OTHER
     { category: 'OTHER', method: 'GET', path: '/v1/models', desc: 'List active model configuration', defaultPayload: {} }
   ];
 
-  const [selectedEndpoint, setSelectedEndpoint] = useState(endpoints[0]);
+  const [selectedEndpoint, setSelectedEndpoint] = useState<ExplorerEndpoint>(endpoints[0]);
   const [requestPayload, setRequestPayload] = useState(JSON.stringify(endpoints[0].defaultPayload, null, 2));
   const [responseOutput, setResponseOutput] = useState<string | null>(null);
   const [statusCode, setStatusCode] = useState<number | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const categories = ['ALL', 'TEXT TRANSFORMATION', 'MULTIMODAL', 'VISUAL AI', 'IMAGE GENERATION', 'VIDEO', 'AUDIO', 'PRESENTATION', 'CONSISTENCY', 'OTHER'];
 
@@ -70,11 +84,12 @@ export const ApiExplorer: React.FC = () => {
     return matchesSearch && matchesCat;
   });
 
-  const handleSelectEndpoint = (ep: typeof endpoints[0]) => {
+  const handleSelectEndpoint = (ep: ExplorerEndpoint) => {
     setSelectedEndpoint(ep);
     setRequestPayload(JSON.stringify(ep.defaultPayload, null, 2));
     setResponseOutput(null);
     setStatusCode(null);
+    setSelectedFile(null);
   };
 
   const handleSendRequest = async () => {
@@ -82,7 +97,7 @@ export const ApiExplorer: React.FC = () => {
     setResponseOutput(null);
     setStatusCode(null);
     try {
-      let parsedData = {};
+      let parsedData: any = {};
       try {
         parsedData = JSON.parse(requestPayload);
       } catch (e) {
@@ -90,19 +105,39 @@ export const ApiExplorer: React.FC = () => {
       }
 
       let res;
-      const path = selectedEndpoint.path.replace('{job_id}', 'job_demo_123').replace('{source_id}', 'source_demo_123').replace('{filename}', 'demo.png');
-      
+      const demoFile = selectedEndpoint.demoFilename ?? 'demo.png';
+      const path = selectedEndpoint.path
+        .replace('{job_id}', 'job_demo_123')
+        .replace('{source_id}', 'source_demo_123')
+        .replace('{filename}', demoFile);
+
+      const timeout = selectedEndpoint.timeout ?? 120000;
+
       if (selectedEndpoint.method === 'GET') {
-        res = await apiClient.get(path);
+        res = await apiClient.get(path, { timeout });
+      } else if (selectedEndpoint.needsFile) {
+        if (!selectedFile) {
+          throw Object.assign(new Error(`Select a file first — ${selectedEndpoint.path} requires multipart field '${selectedEndpoint.fileField}'.`), { status: 400 });
+        }
+        const formData = new FormData();
+        formData.append(selectedEndpoint.fileField ?? 'file', selectedFile, selectedFile.name);
+        // Remaining JSON keys become extra form fields (e.g. output_types, task, prompt)
+        Object.entries(parsedData || {}).forEach(([k, v]) => {
+          if (v !== null && v !== undefined && v !== '') {
+            formData.append(k, typeof v === 'string' ? v : JSON.stringify(v));
+          }
+        });
+        res = await apiClient.post(path, formData, { timeout });
       } else {
-        res = await apiClient.post(path, parsedData);
+        res = await apiClient.post(path, parsedData, { timeout });
       }
 
+      const isFallback = (res as any).statusText === 'OK (Fallback Mock)';
       setStatusCode(res.status);
-      setResponseOutput(JSON.stringify(res.data, null, 2));
+      setResponseOutput(JSON.stringify({ ...(isFallback ? { _warning: 'Backend unreachable — showing fallback mock. Start FastAPI on :8000.' } : {}), ...(res.data as object) }, null, 2));
     } catch (err: any) {
-      setStatusCode(err.response?.status || 500);
-      setResponseOutput(JSON.stringify({ error: err.message }, null, 2));
+      setStatusCode(err.status || err.response?.status || 500);
+      setResponseOutput(JSON.stringify({ error: err.message, ...(err.data ? { detail: err.data } : {}) }, null, 2));
     } finally {
       setIsExecuting(false);
     }
@@ -212,9 +247,22 @@ export const ApiExplorer: React.FC = () => {
 
             <p className={`text-xs ${isDarkMode ? 'text-[#b3b3b3]' : 'text-slate-600'}`}>{selectedEndpoint.desc}</p>
 
+            {selectedEndpoint.needsFile && (
+              <div className={`p-3 rounded-xl border text-xs space-y-2 ${isDarkMode ? 'bg-[#121212] border-white/10' : 'bg-amber-50 border-amber-200'}`}>
+                <p className="font-bold">File required — field '{selectedEndpoint.fileField}'</p>
+                <input
+                  type="file"
+                  accept={selectedEndpoint.fileAccept}
+                  onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
+                  className="text-xs"
+                />
+                {selectedFile && <p className="opacity-70">Selected: {selectedFile.name} ({Math.round(selectedFile.size / 1024)} KB)</p>}
+              </div>
+            )}
+
             {selectedEndpoint.method === 'POST' && (
               <div className="space-y-2">
-                <label className={`text-[10px] font-bold uppercase tracking-widest ${isDarkMode ? 'text-[#b3b3b3]' : 'text-slate-500'}`}>Request Payload (JSON)</label>
+                <label className={`text-[10px] font-bold uppercase tracking-widest ${isDarkMode ? 'text-[#b3b3b3]' : 'text-slate-500'}`}>{selectedEndpoint.needsFile ? 'Extra form fields (JSON → multipart fields)' : 'Request Payload (JSON)'}</label>
                 <textarea
                   value={requestPayload}
                   onChange={(e) => setRequestPayload(e.target.value)}

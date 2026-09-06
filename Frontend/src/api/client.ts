@@ -167,6 +167,9 @@ apiClient.interceptors.response.use(
     } else {
       errorMessage = error.message;
     }
-    return Promise.reject(new Error(errorMessage));
+    const errWithStatus = new Error(errorMessage) as Error & { status?: number; data?: any };
+    errWithStatus.status = error.response?.status ?? 500;
+    errWithStatus.data = error.response?.data;
+    return Promise.reject(errWithStatus);
   }
 );

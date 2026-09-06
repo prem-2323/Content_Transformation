@@ -127,7 +127,9 @@ export default function App() {
   };
 
   const handleSendToTransformFromKeep = (text: string) => {
-    // We can pass initial text or store it in state if TransformationForm accepts initialSourceText
+    // Prefill the Transform tab — TransformationForm only reads initialSourceText on mount,
+    // so store it and remount via key below.
+    if (text) setKeepInitialText(text);
     setActiveTab('transform');
   };
 
@@ -210,8 +212,10 @@ export default function App() {
 
               {activeTab === 'transform' && (
                 <TransformationForm
+                  key={keepInitialText || 'default'}
                   onRunTransform={handleRunTransform}
                   isLoading={isLoading}
+                  initialSourceText={keepInitialText || undefined}
                 />
               )}
 

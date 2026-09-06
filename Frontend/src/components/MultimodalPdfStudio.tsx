@@ -11,7 +11,12 @@ export const MultimodalPdfStudio: React.FC<{ onCompleteResult: (res: any) => voi
   const [language, setLanguage] = useState('English');
   const [detailLevel, setDetailLevel] = useState('Medium');
   const [objective, setObjective] = useState('Comprehensive Analysis');
-  const [outputTypes, setOutputTypes] = useState<string[]>(['Summary', 'Presentation']);
+  const [outputTypes, setOutputTypes] = useState<string[]>(['summary', 'presentation']);
+
+  const OUTPUT_OPTIONS = ['summary', 'linkedin', 'twitter', 'advisory', 'presentation', 'video_script', 'infographic'];
+
+  const toggleOutputType = (ot: string) =>
+    setOutputTypes((prev) => (prev.includes(ot) ? prev.filter((x) => x !== ot) : [...prev, ot]));
 
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<any>(null);
@@ -25,10 +30,19 @@ export const MultimodalPdfStudio: React.FC<{ onCompleteResult: (res: any) => voi
     const interval = setInterval(async () => {
       try {
         const data = await multimodalApi.getStatus(jobId);
+        if ((data as any)._isFallback || String(jobId).startsWith('job_fallback_')) {
+          setError('Backend unreachable — showing offline demo data. Start FastAPI on :8000 and resubmit.');
+          setIsLoading(false);
+          clearInterval(interval);
+          return;
+        }
         setJobStatus(data);
         if (data.status === 'completed' || data.status === 'failed') {
           clearInterval(interval);
           setIsLoading(false);
+          if (data.status === 'failed') {
+            setError(data.error || 'Multimodal pipeline failed.');
+          }
           if (data.status === 'completed') {
             onCompleteResult(data);
           }
@@ -41,7 +55,7 @@ export const MultimodalPdfStudio: React.FC<{ onCompleteResult: (res: any) => voi
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [jobId]);
+  }, [jobId, onCompleteResult]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,20 +69,31 @@ export const MultimodalPdfStudio: React.FC<{ onCompleteResult: (res: any) => voi
     setJobId(null);
     setJobStatus(null);
 
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      setError('Only PDF files are supported by /multimodal/transform-pdf.');
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', file, file.name);
       formData.append('audience', audience);
       formData.append('tone', tone);
       formData.append('language', language);
       formData.append('detail_level', detailLevel);
       formData.append('objective', objective);
-      outputTypes.forEach(ot => formData.append('output_types', ot));
+      // Backend resolve_form_output_types expects ONE comma-separated / JSON-list field.
+      // Appending the key multiple times would drop all but one value server-side.
+      formData.append('output_types', outputTypes.join(','));
 
       const res = await multimodalApi.transformPdf(formData);
+      if ((res as any).job_id && String((res as any).job_id).startsWith('job_fallback_')) {
+        throw new Error('Backend unreachable — start FastAPI on :8000 and retry.');
+      }
       if (res.job_id) {
         setJobId(res.job_id);
-        setJobStatus({ status: 'queued', step: 'Uploading' });
+        setJobStatus({ status: 'queued', step: 'Uploading', current_step: 'queued', progress: 0 });
       } else {
         throw new Error('Backend did not return a job ID.');
       }
@@ -129,6 +154,40 @@ export const MultimodalPdfStudio: React.FC<{ onCompleteResult: (res: any) => voi
                 className={`w-full mt-1 px-3 py-2 rounded-xl text-xs border ${isDarkMode ? 'bg-[#121212] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'}`}
               />
             </div>
+            <div>
+              <label className={`text-[10px] font-bold uppercase tracking-widest ${isDarkMode ? 'text-[#b3b3b3]' : 'text-slate-500'}`}>Language</label>
+              <input
+                type="text"
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                className={`w-full mt-1 px-3 py-2 rounded-xl text-xs border ${isDarkMode ? 'bg-[#121212] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'}`}
+              />
+            </div>
+            <div>
+              <label className={`text-[10px] font-bold uppercase tracking-widest ${isDarkMode ? 'text-[#b3b3b3]' : 'text-slate-500'}`}>Detail level</label>
+              <input
+                type="text"
+                value={detailLevel}
+                onChange={(e) => setDetailLevel(e.target.value)}
+                className={`w-full mt-1 px-3 py-2 rounded-xl text-xs border ${isDarkMode ? 'bg-[#121212] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'}`}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className={`text-[10px] font-bold uppercase tracking-widest ${isDarkMode ? 'text-[#b3b3b3]' : 'text-slate-500'}`}>Output types (sent as one comma-separated field)</label>
+            <div className="flex flex-wrap gap-2">
+              {OUTPUT_OPTIONS.map((ot) => (
+                <button
+                  key={ot}
+                  type="button"
+                  onClick={() => toggleOutputType(ot)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${outputTypes.includes(ot) ? 'bg-[#1ed760] text-black border-[#1ed760]' : isDarkMode ? 'border-white/10 text-slate-300 hover:border-white/30' : 'border-slate-300 text-slate-600 hover:border-slate-400'}`}
+                >
+                  {ot}
+                </button>
+              ))}
+            </div>
           </div>
 
           {error && (
@@ -155,25 +214,36 @@ export const MultimodalPdfStudio: React.FC<{ onCompleteResult: (res: any) => voi
             <h3 className="font-bold text-sm mb-4">Pipeline Execution Status</h3>
             {jobId ? (
               <div className="space-y-4">
-                <div className="p-3 rounded-xl bg-[#121212] border border-white/10 space-y-1">
-                  <p className="text-[10px] text-slate-400 font-mono">Job ID: {jobId}</p>
+                <div className={`p-3 rounded-xl border space-y-1 ${isDarkMode ? 'bg-[#121212] border-white/10 text-gray-100' : 'bg-slate-900 border-slate-900 text-slate-100'}`}>
+                  <p className="text-[10px] opacity-70 font-mono">Job ID: {jobId}</p>
                   <p className="text-xs font-bold text-[#1ed760] capitalize">Status: {jobStatus?.status || 'Processing...'}</p>
-                  <p className="text-xs">Current Step: <span className="font-semibold">{jobStatus?.step || 'Initializing'}</span></p>
+                  <p className="text-xs">Current Step: <span className="font-semibold">{jobStatus?.step || jobStatus?.current_step || 'Initializing'}</span></p>
+                  {typeof jobStatus?.progress === 'number' && <p className="text-xs opacity-80">Progress: {jobStatus.progress}%</p>}
+                  {typeof jobStatus?.extracted_images_count === 'number' && (
+                    <p className="text-xs opacity-80">Images: {jobStatus.extracted_images_count} • Text: {String(jobStatus?.extracted_text || '').length} chars</p>
+                  )}
+                  {jobStatus?.status === 'failed' && jobStatus?.error && (
+                    <p className="text-xs text-red-400">{jobStatus.error}</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
-                  {['Uploading', 'Extracting PDF', 'Analyzing images with Gemma', 'Understanding content', 'Generating outputs with Qwen', 'Running consistency checks', 'Completed'].map((stepName, idx) => {
-                    const isPassed = jobStatus?.step === stepName || idx < 3;
-                    return (
-                      <div key={idx} className="flex items-center space-x-3 text-xs">
-                        <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${isPassed ? 'bg-[#1ed760] text-black' : isDarkMode ? 'bg-white/10 text-slate-400' : 'bg-slate-200 text-slate-600'
-                          }`}>
-                          {idx + 1}
+                  {(() => {
+                    const ordered = ['queued', 'extracting_pdf', 'analyzing_images', 'analyzing_text', 'generating_outputs', 'completed'];
+                    const labels = ['Queued', 'Extracting PDF', 'Analyzing images with Gemma', 'Understanding content', 'Generating outputs with Qwen', 'Completed'];
+                    const currentIdx = Math.max(0, ordered.indexOf(jobStatus?.current_step ?? 'queued'));
+                    return labels.map((stepName, idx) => {
+                      const isPassed = idx <= currentIdx || jobStatus?.status === 'completed';
+                      return (
+                        <div key={idx} className="flex items-center space-x-3 text-xs">
+                          <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${isPassed ? 'bg-[#1ed760] text-black' : isDarkMode ? 'bg-white/10 text-slate-400' : 'bg-slate-200 text-slate-600'}`}>
+                            {idx + 1}
+                          </div>
+                          <span className={isPassed ? (isDarkMode ? 'text-white font-semibold' : 'text-slate-900 font-semibold') : 'text-slate-500'}>{stepName}</span>
                         </div>
-                        <span className={isPassed ? (isDarkMode ? 'text-white font-semibold' : 'text-slate-900 font-semibold') : 'text-slate-500'}>{stepName}</span>
-                      </div>
-                    );
-                  })}
+                      );
+                    });
+                  })()}
                 </div>
               </div>
             ) : (
