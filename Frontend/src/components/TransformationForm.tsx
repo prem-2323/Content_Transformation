@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, Globe, Sparkles, Sliders, CheckCircle2, ArrowRight, Layers, FileUp, Video, Image as ImageIcon, Bookmark, Trash2, Plus, Share2, MessageSquare, ShieldAlert, PieChart, Presentation, Volume2, Music, Mail, Square, Clock } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { FAIcon } from './FAIcon';
 
 interface TransformationFormProps {
   onRunTransform: (payload: any, isFile: boolean) => void;
@@ -45,7 +46,7 @@ export const TransformationForm: React.FC<TransformationFormProps> = ({ onRunTra
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem('synthetix_custom_templates');
+    const saved = localStorage.getItem('contentforge_custom_templates') || localStorage.getItem('synthetix_custom_templates');
     if (saved) {
       try {
         setCustomTemplates(JSON.parse(saved));
@@ -94,7 +95,7 @@ export const TransformationForm: React.FC<TransformationFormProps> = ({ onRunTra
     };
     const updated = [...customTemplates, newTemplate];
     setCustomTemplates(updated);
-    localStorage.setItem('synthetix_custom_templates', JSON.stringify(updated));
+    localStorage.setItem('contentforge_custom_templates', JSON.stringify(updated));
     setNewTemplateName('');
     setShowSaveModal(false);
   };
@@ -116,18 +117,18 @@ export const TransformationForm: React.FC<TransformationFormProps> = ({ onRunTra
     e.stopPropagation();
     const updated = customTemplates.filter(t => t.id !== id);
     setCustomTemplates(updated);
-    localStorage.setItem('synthetix_custom_templates', JSON.stringify(updated));
+    localStorage.setItem('contentforge_custom_templates', JSON.stringify(updated));
   };
 
   const outputFormatOptions = [
-    { id: 'Executive Summary', label: 'Executive Summary', desc: 'Concise brief with key takeaways & citations', icon: FileText },
-    { id: 'LinkedIn Post', label: 'LinkedIn Post', desc: 'Engaging thought leadership post with hashtags', icon: Share2 },
-    { id: 'Twitter/X Post', label: 'Twitter/X Post', desc: 'Thread-optimized microblog format', icon: MessageSquare },
-    { id: 'Advisory', label: 'Advisory Memo', desc: 'Formal confidential briefing document', icon: ShieldAlert },
-    { id: 'Infographic', label: 'Infographic Spec', desc: 'Structured metrics & bullet points for visuals', icon: PieChart },
-    { id: 'Presentation', label: 'Presentation (.pptx)', desc: 'Slide deck outline with titles & talking points', icon: Presentation },
-    { id: 'Video', label: 'Video Storyboard', desc: 'Scene-by-scene script with timestamps & voice prompts', icon: Video },
-    { id: 'Email Announcement', label: 'Email Announcement', desc: 'Engaging corporate broadcast or team email update', icon: Mail }
+    { id: 'Executive Summary', label: 'Executive Summary', desc: 'Concise brief with key takeaways & citations', faIcon: 'fa-solid fa-file-lines' },
+    { id: 'LinkedIn Post', label: 'LinkedIn Post', desc: 'Engaging thought leadership post with hashtags', faIcon: 'fa-brands fa-linkedin' },
+    { id: 'Twitter/X Post', label: 'Twitter/X Post', desc: 'Thread-optimized microblog format', faIcon: 'fa-brands fa-x-twitter' },
+    { id: 'Advisory', label: 'Advisory Memo', desc: 'Formal confidential briefing document', faIcon: 'fa-solid fa-shield-halved' },
+    { id: 'Infographic', label: 'Infographic Spec', desc: 'Structured metrics & bullet points for visuals', faIcon: 'fa-solid fa-chart-pie' },
+    { id: 'Presentation', label: 'Presentation (.pptx)', desc: 'Slide deck outline with titles & talking points', faIcon: 'fa-solid fa-file-powerpoint' },
+    { id: 'Video', label: 'Video Storyboard', desc: 'Scene-by-scene script with timestamps & voice prompts', faIcon: 'fa-solid fa-clapperboard' },
+    { id: 'Email Announcement', label: 'Email Announcement', desc: 'Engaging corporate broadcast or team email update', faIcon: 'fa-solid fa-envelope' }
   ];
 
   const mp3AddonOptions = [
@@ -496,7 +497,7 @@ export const TransformationForm: React.FC<TransformationFormProps> = ({ onRunTra
                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
                       isSelected ? 'bg-[#1ed760] text-black' : isDarkMode ? 'bg-[#282828] text-[#1ed760]' : 'bg-slate-200 text-slate-700'
                     }`}>
-                      <IconComponent className="w-4 h-4" />
+                      <FAIcon icon={opt.faIcon} className="text-sm" />
                     </div>
                     <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
                       isSelected 

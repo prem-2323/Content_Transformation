@@ -24,6 +24,7 @@ import { ConsistencyPipeline } from './components/ConsistencyPipeline';
 import { QualityScoreDashboard } from './components/QualityScoreDashboard';
 import { AudienceReframer } from './components/AudienceReframer';
 import { BrandVoiceStudio } from './components/BrandVoiceStudio';
+import { BottomNavbar } from './components/BottomNavbar';
 import { OpenApiModal } from './components/OpenApiModal';
 import { HomePage } from './components/HomePage';
 import { LoginPage } from './components/LoginPage';
@@ -116,9 +117,9 @@ export default function App() {
         result: data
       };
 
-      const existingHistory = JSON.parse(localStorage.getItem('synthetix_transformation_history') || '[]');
+      const existingHistory = JSON.parse(localStorage.getItem('contentforge_transformation_history') || localStorage.getItem('synthetix_transformation_history') || '[]');
       const updatedHistory = [historyItem, ...existingHistory];
-      localStorage.setItem('synthetix_transformation_history', JSON.stringify(updatedHistory));
+      localStorage.setItem('contentforge_transformation_history', JSON.stringify(updatedHistory));
 
       try {
         await setDoc(doc(db, 'history', historyItem.id), historyItem);
@@ -148,7 +149,7 @@ export default function App() {
   };
 
   return (
-    <div className={`min-h-screen ${isDarkMode ? 'dark bg-[#121212] text-[#b3b3b3]' : 'bg-slate-50 text-slate-800'} flex flex-col font-sans selection:bg-[#1ed760] selection:text-black relative overflow-hidden transition-colors duration-300`}>
+    <div className={`h-screen ${isDarkMode ? 'dark bg-[#121212] text-[#b3b3b3]' : 'bg-slate-50 text-slate-800'} flex flex-col font-sans selection:bg-[#1ed760] selection:text-black relative overflow-hidden transition-colors duration-300`}>
       {/* 1. AI Background: Subtle Animated Gradient & Dot Grid & Floating Moving/Stable Bubbles */}
       <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
         {/* Stable gradient glows */}
@@ -176,7 +177,7 @@ export default function App() {
         <div className="absolute left-[10%] w-3 h-3 rounded-full bg-emerald-500/40 animate-flow-down" style={{ animationDelay: '3s', animationDuration: '8s' }} />
       </div>
 
-      <div className="relative z-10 flex flex-col min-h-screen">
+      <div className="relative z-10 flex flex-col h-full overflow-hidden">
         <Header
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -206,7 +207,7 @@ export default function App() {
             }}
           />
         ) : (
-          <div className="app-layout flex-1 flex overflow-hidden w-full h-full">
+          <div className="app-layout flex-1 flex min-h-0 overflow-hidden w-full h-full">
             <Sidebar
               activeTab={activeTab}
               setActiveTab={setActiveTab}
@@ -344,6 +345,8 @@ export default function App() {
                 <ApiExplorer />
               )}
             </main>
+
+            <BottomNavbar activeTab={activeTab} setActiveTab={setActiveTab} />
           </div>
         )}
       </div>

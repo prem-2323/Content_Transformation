@@ -24,14 +24,14 @@ export const HistoryWorkspace: React.FC<HistoryWorkspaceProps> = ({ onLoadSessio
           setHistory(docs);
         } else {
           // Fallback to localStorage
-          const saved = localStorage.getItem('synthetix_transformation_history');
+          const saved = localStorage.getItem('contentforge_transformation_history') || localStorage.getItem('synthetix_transformation_history');
           if (saved) {
             setHistory(JSON.parse(saved));
           }
         }
       } catch (e) {
         console.error("Failed to fetch history from Firestore, falling back to localStorage", e);
-        const saved = localStorage.getItem('synthetix_transformation_history');
+        const saved = localStorage.getItem('contentforge_transformation_history') || localStorage.getItem('synthetix_transformation_history');
         if (saved) {
           try {
             setHistory(JSON.parse(saved));
@@ -55,7 +55,7 @@ export const HistoryWorkspace: React.FC<HistoryWorkspaceProps> = ({ onLoadSessio
     }
     const updated = history.filter(item => item.id !== id);
     setHistory(updated);
-    localStorage.setItem('synthetix_transformation_history', JSON.stringify(updated));
+    localStorage.setItem('contentforge_transformation_history', JSON.stringify(updated));
   };
 
   const handleClearAll = async () => {
@@ -67,6 +67,7 @@ export const HistoryWorkspace: React.FC<HistoryWorkspaceProps> = ({ onLoadSessio
       console.error("Error clearing Firestore history:", err);
     }
     setHistory([]);
+    localStorage.removeItem('contentforge_transformation_history');
     localStorage.removeItem('synthetix_transformation_history');
   };
 

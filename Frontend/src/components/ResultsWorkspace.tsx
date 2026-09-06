@@ -226,7 +226,7 @@ export const ResultsWorkspace: React.FC<ResultsWorkspaceProps> = ({ transformati
           try {
             const recipient = prompt("Enter recipient email address:");
             if (!recipient) return;
-            const subject = `[Spotify Synthetix] ${activeChannel} Brief`;
+            const subject = `[ContentForge AI] ${activeChannel} Brief`;
             const emailContent = [
               `To: ${recipient}`,
               `Subject: ${subject}`,

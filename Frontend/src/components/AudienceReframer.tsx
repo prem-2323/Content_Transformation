@@ -3,54 +3,55 @@ import { Users, Sparkles, Copy, Check, RefreshCw, Briefcase, Code, Globe, Gradua
 import { motion, AnimatePresence } from 'motion/react';
 import { useTheme } from '../context/ThemeContext';
 import { transformApi, BrandVoiceProfile } from '../api/transform';
+import { FAIcon } from './FAIcon';
 
 export const AUDIENCE_PERSONAS = [
   {
     id: 'CEO or Executives',
     label: 'CEO & Executives',
-    icon: Briefcase,
+    faIcon: 'fa-solid fa-user-tie',
     color: 'from-amber-500 to-orange-600',
     description: 'High-level ROI, strategic impact, metrics, decision points, concise takeaways.'
   },
   {
     id: 'Technical Teams',
     label: 'Technical Teams',
-    icon: Code,
+    faIcon: 'fa-solid fa-code',
     color: 'from-blue-500 to-indigo-600',
     description: 'Architecture details, data specs, technical nuances, integration steps, APIs.'
   },
   {
     id: 'General Public',
     label: 'General Public',
-    icon: Globe,
+    faIcon: 'fa-solid fa-earth-americas',
     color: 'from-emerald-500 to-teal-600',
     description: 'Clear non-jargon language, relatable analogies, real-world relevance, easy flow.'
   },
   {
     id: 'Students',
     label: 'Students & Learners',
-    icon: GraduationCap,
+    faIcon: 'fa-solid fa-graduation-cap',
     color: 'from-purple-500 to-violet-600',
     description: 'Educational framing, foundational principles, learning takeaways, glossaries.'
   },
   {
     id: 'Customers',
     label: 'Customers & Clients',
-    icon: ShoppingBag,
+    faIcon: 'fa-solid fa-bag-shopping',
     color: 'from-pink-500 to-rose-600',
     description: 'Direct user benefits, value proposition, actionable steps, problem-solution focus.'
   },
   {
     id: 'Journalists',
     label: 'Journalists & Press',
-    icon: Newspaper,
+    faIcon: 'fa-solid fa-newspaper',
     color: 'from-cyan-500 to-blue-600',
     description: 'Press release style, punchy headline, lead paragraph, quotes, stat callouts.'
   },
   {
     id: 'Government Officials',
     label: 'Government & Regulators',
-    icon: Landmark,
+    faIcon: 'fa-solid fa-landmark',
     color: 'from-[#1ed760] to-emerald-700',
     description: 'Formal policy alignment, compliance impacts, risk assessment, governance facts.'
   }
@@ -281,7 +282,7 @@ export const AudienceReframer: React.FC = () => {
                     }`}
                   >
                     <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${persona.color} flex items-center justify-center text-white shrink-0 mt-0.5 shadow-sm`}>
-                      <Icon className="w-4 h-4" />
+                      <FAIcon icon={persona.faIcon} className="text-xs text-white" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
@@ -341,11 +342,10 @@ export const AudienceReframer: React.FC = () => {
               {Object.entries(results as Record<string, string>).map(([audience, content]: [string, string]) => {
                 const persona = AUDIENCE_PERSONAS.find(p => p.id === audience) || {
                   label: audience,
-                  icon: Users,
+                  faIcon: 'fa-solid fa-users',
                   color: 'from-emerald-500 to-teal-600',
                   description: 'Tailored audience profile'
                 };
-                const Icon = persona.icon;
 
                 return (
                   <div
@@ -358,7 +358,7 @@ export const AudienceReframer: React.FC = () => {
                       <div className="flex items-center justify-between border-b border-[#282828] pb-3">
                         <div className="flex items-center space-x-2.5">
                           <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${persona.color} flex items-center justify-center text-white shrink-0 shadow`}>
-                            <Icon className="w-4 h-4" />
+                            <FAIcon icon={persona.faIcon || 'fa-solid fa-users'} className="text-xs text-white" />
                           </div>
                           <div>
                             <h3 className={`text-xs font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>

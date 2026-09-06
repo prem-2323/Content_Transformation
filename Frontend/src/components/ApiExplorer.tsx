@@ -72,7 +72,7 @@ export const ApiExplorer: React.FC = () => {
     { category: 'CONSISTENCY', method: 'GET', path: '/consistency/health', desc: 'Consistency engine health + wired stage map', defaultPayload: {} },
 
     // AI CHAT + REFRAMING + RESULTS
-    { category: 'OTHER', method: 'POST', path: '/api/ai/chat', desc: 'Chat with Synthetix AI assistant (Qwen3)', defaultPayload: { messages: [{ role: "user", content: "Summarize the benefits of fact-grounded generation." }] }, timeout: 180000 },
+    { category: 'OTHER', method: 'POST', path: '/api/ai/chat', desc: 'Chat with ContentForge AI assistant (Qwen3)', defaultPayload: { messages: [{ role: "user", content: "Summarize the benefits of fact-grounded generation." }] }, timeout: 180000 },
     { category: 'OTHER', method: 'POST', path: '/audience-reframe', desc: 'Reframe text for multiple audiences (alias: /reframing)', defaultPayload: { text: "Our platform automates content transformation.", audiences: ["CEO or executives", "Technical teams"] }, timeout: 180000 },
     { category: 'OTHER', method: 'POST', path: '/results/export', desc: 'Export deliverables as markdown/txt bundle', defaultPayload: { outputs: { summary: "Revenue reached $50M." }, format: "structured" }, timeout: 60000 },
     { category: 'OTHER', method: 'GET', path: '/health', desc: 'Backend health check', defaultPayload: {} },

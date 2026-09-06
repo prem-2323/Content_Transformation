@@ -12,7 +12,7 @@ interface Message {
 export const GeneralChatbot: React.FC = () => {
   const { isDarkMode } = useTheme();
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'assistant', content: 'Hello! I am your Synthetix AI Assistant. How can I help you with your content transformation, fact-checking, or strategy today?' }
+    { role: 'assistant', content: 'Hello! I am your ContentForge AI Assistant. How can I help you with your content transformation, fact-checking, or strategy today?' }
   ]);
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -165,7 +165,7 @@ export const GeneralChatbot: React.FC = () => {
             <Bot className="w-5 h-5" />
           </div>
           <div>
-            <h2 className={`text-xl font-bold tracking-tight font-serif ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Synthetix AI Assistant</h2>
+            <h2 className={`text-xl font-bold tracking-tight font-serif ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>ContentForge AI Assistant</h2>
             <p className={`text-xs ${isDarkMode ? 'text-[#b3b3b3]' : 'text-slate-500'}`}>Local AI powered by Ollama &middot; Qwen3 4B</p>
           </div>
         </div>

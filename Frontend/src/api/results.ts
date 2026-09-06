@@ -15,7 +15,7 @@ export const resultsApi = {
     });
     const disposition = response.headers['content-disposition'] || '';
     const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1]
-      || (data.format === 'all' ? 'synthetix_all_deliverables.md' : 'deliverable_structured.md');
+      || (data.format === 'all' ? 'contentforge_all_deliverables.md' : 'deliverable_structured.md');
     return { blob: response.data as Blob, filename };
   },
 };

@@ -1,7 +1,7 @@
 import React from 'react';
-import { Sparkles, Terminal, ShieldCheck, FileText, Clock, MessageSquare, StickyNote, Upload, Image, Film, Video, Volume2, Presentation, Languages, Layers, Award, HardDrive, X, Users, Sliders } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useTheme } from '../context/ThemeContext';
+import { FAIcon } from './FAIcon';
 
 interface SidebarProps {
   activeTab: string;
@@ -20,48 +20,48 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
     {
       title: 'TRANSFORM',
       items: [
-        { id: 'transform', label: 'Transform Engine', icon: Sparkles },
-        { id: 'results', label: 'Results Workspace', icon: FileText },
-        { id: 'audience', label: 'Audience Reframing', icon: Users },
+        { id: 'transform', label: 'Transform Engine', faIcon: 'fa-solid fa-wand-magic-sparkles' },
+        { id: 'results', label: 'Results Workspace', faIcon: 'fa-solid fa-file-lines' },
+        { id: 'audience', label: 'Audience Reframing', faIcon: 'fa-solid fa-users' },
       ]
     },
     {
       title: 'CREATION',
       items: [
-        { id: 'multimodal', label: 'PDF Studio', icon: Upload },
-        { id: 'visual', label: 'Visual AI', icon: Image },
-        { id: 'image', label: 'Image Studio', icon: Image },
-        { id: 'scene', label: 'Scene Generator', icon: Film },
-        { id: 'video_plan', label: 'Video Planner', icon: Video },
-        { id: 'video', label: 'Video Studio', icon: Video },
-        { id: 'audio', label: 'Audio', icon: Volume2 },
+        { id: 'multimodal', label: 'PDF Studio', faIcon: 'fa-solid fa-file-pdf' },
+        { id: 'visual', label: 'Visual AI', faIcon: 'fa-solid fa-eye' },
+        { id: 'image', label: 'Image Studio', faIcon: 'fa-solid fa-image' },
+        { id: 'scene', label: 'Scene Generator', faIcon: 'fa-solid fa-film' },
+        { id: 'video_plan', label: 'Video Planner', faIcon: 'fa-solid fa-video' },
+        { id: 'video', label: 'Video Studio', faIcon: 'fa-solid fa-clapperboard' },
+        { id: 'audio', label: 'Audio Studio', faIcon: 'fa-solid fa-volume-high' },
       ]
     },
     {
       title: 'OUTPUTS & BRAND',
       items: [
-        { id: 'presentation', label: 'Presentation', icon: Presentation },
-        { id: 'translation', label: 'Translation', icon: Languages },
-        { id: 'brand_voice', label: 'Brand Voice', icon: Sliders },
+        { id: 'presentation', label: 'Presentation', faIcon: 'fa-solid fa-file-powerpoint' },
+        { id: 'translation', label: 'Translation', faIcon: 'fa-solid fa-language' },
+        { id: 'brand_voice', label: 'Brand Voice', faIcon: 'fa-solid fa-sliders' },
       ]
     },
     {
       title: 'QUALITY',
       items: [
-        { id: 'registry', label: 'Fact Registry', icon: ShieldCheck },
-        { id: 'pipeline', label: 'Consistency', icon: Layers },
-        { id: 'quality', label: 'Quality Score', icon: Award },
-        { id: 'intelligence', label: 'Intelligence', icon: ShieldCheck },
+        { id: 'registry', label: 'Fact Registry', faIcon: 'fa-solid fa-shield-halved' },
+        { id: 'pipeline', label: 'Consistency', faIcon: 'fa-solid fa-layer-group' },
+        { id: 'quality', label: 'Quality Score', faIcon: 'fa-solid fa-award' },
+        { id: 'intelligence', label: 'Intelligence', faIcon: 'fa-solid fa-brain' },
       ]
     },
     {
       title: 'MORE',
       items: [
-        { id: 'gdrive', label: 'Google Drive', icon: HardDrive },
-        { id: 'keep', label: 'Keep Notes', icon: StickyNote },
-        { id: 'chatbot', label: 'AI Assistant', icon: MessageSquare },
-        { id: 'history', label: 'History', icon: Clock },
-        { id: 'api', label: 'API Explorer', icon: Terminal },
+        { id: 'gdrive', label: 'Google Drive', faIcon: 'fa-brands fa-google-drive' },
+        { id: 'keep', label: 'Keep Notes', faIcon: 'fa-solid fa-note-sticky' },
+        { id: 'chatbot', label: 'AI Assistant', faIcon: 'fa-solid fa-robot' },
+        { id: 'history', label: 'History', faIcon: 'fa-solid fa-clock-rotate-left' },
+        { id: 'api', label: 'API Explorer', faIcon: 'fa-solid fa-terminal' },
       ]
     }
   ];
@@ -77,9 +77,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
       )}
 
       <aside className={`
-        sidebar fixed md:sticky top-0 inset-y-0 left-0 z-50 w-[220px] min-w-[220px] h-screen flex flex-col shrink-0 border-r transition-transform duration-300 p-3 select-none
+        sidebar w-[220px] min-w-[220px] h-full flex flex-col shrink-0 border-r transition-transform duration-300 p-3 select-none
         ${isDarkMode ? 'bg-[#121212] border-[#282828] text-white' : 'bg-white border-slate-200 text-slate-800'}
-        ${isOpen !== undefined ? (isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0') : ''}
+        ${isOpen !== undefined ? (isOpen ? 'fixed inset-y-0 left-0 z-50 translate-x-0' : 'fixed inset-y-0 left-0 z-50 -translate-x-full md:relative md:translate-x-0 md:z-auto') : ''}
       `}>
         <div className="flex items-center justify-between px-2 h-[30px] shrink-0 mb-2">
           <span className={`text-[12px] font-extrabold tracking-widest uppercase ${isDarkMode ? 'text-[#b3b3b3]' : 'text-slate-400'}`}>
@@ -90,12 +90,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
               onClick={onClose}
               className={`p-1 rounded-lg md:hidden ${isDarkMode ? 'hover:bg-[#181818] text-[#b3b3b3]' : 'hover:bg-slate-100 text-slate-600'}`}
             >
-              <X className="w-4 h-4" />
+              <FAIcon icon="fa-solid fa-xmark" className="w-4 h-4" />
             </button>
           )}
         </div>
 
-        <div className="sidebar-nav flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-thin">
+        <div className="sidebar-nav flex-1 min-h-0 overflow-y-auto space-y-3 pr-1 scrollbar-thin">
           {groups.map((group, gIdx) => (
             <div key={gIdx} className="space-y-0.5">
               <div className={`h-[28px] flex items-center px-2 text-[11px] font-extrabold tracking-wider uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -103,7 +103,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
               </div>
               <div className="space-y-0.5">
                 {group.items.map((item) => {
-                  const Icon = item.icon;
                   const isActive = activeTab === item.id;
 
                   return (
@@ -129,7 +128,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
                         />
                       )}
                       <span className="relative z-10 flex items-center space-x-2.5 w-full truncate">
-                        <Icon className={`w-[18px] h-[18px] shrink-0 transition-transform group-hover:scale-110 ${isActive ? 'text-black' : 'text-[#1ed760]'}`} />
+                        <FAIcon icon={item.faIcon} className={`text-sm shrink-0 transition-transform group-hover:scale-110 ${isActive ? 'text-black' : 'text-[#1ed760]'}`} />
                         <span className="truncate">{item.label}</span>
                       </span>
                     </button>

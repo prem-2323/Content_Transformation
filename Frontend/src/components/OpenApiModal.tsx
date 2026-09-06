@@ -15,7 +15,7 @@ export const OpenApiModal: React.FC<OpenApiModalProps> = ({ isOpen, onClose }) =
         <div className="px-6 py-4 glass-panel text-white flex items-center justify-between border-b border-white/10">
           <div className="flex items-center space-x-2">
             <BookOpen className="w-5 h-5 text-[#1ed760]" />
-            <h3 className="font-bold text-base font-serif">OpenAPI 3.1 Specification - Synthetix AI v1.2.0</h3>
+            <h3 className="font-bold text-base font-serif">OpenAPI 3.1 Specification - ContentForge AI v1.2.0</h3>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/10 text-[#b3b3b3] hover:text-white transition">
             <X className="w-5 h-5" />

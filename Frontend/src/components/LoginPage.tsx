@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Sparkles } from 'lucide-react';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { useTheme } from '../context/ThemeContext';
+import { FAIcon } from './FAIcon';
 
 interface LoginPageProps {
   onLoginSuccess: (user: any) => void;
@@ -40,10 +40,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         isDarkMode ? 'glass-card border-white/10 shadow-[0_24px_48px_rgba(0,0,0,0.8)]' : 'bg-white border-slate-200 shadow-xl'
       }`}>
         <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-[#1ed760] flex items-center justify-center mx-auto mb-4 shadow-lg shadow-[#1ed760]/30">
-            <Sparkles className="w-7 h-7 text-black fill-black" />
+          <div className="w-14 h-14 rounded-2xl bg-[#1ed760] flex items-center justify-center mx-auto mb-4 shadow-lg shadow-[#1ed760]/30 text-black">
+            <FAIcon icon="fa-solid fa-wand-magic-sparkles" className="text-xl text-black" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight mb-2">Spotify<span className="text-[#1ed760]">Synthetix</span></h1>
+          <h1 className="text-2xl font-bold tracking-tight mb-2">ContentForge <span className="text-[#1ed760]">AI</span></h1>
           <p className={`text-xs ${isDarkMode ? 'text-[#b3b3b3]' : 'text-slate-600'}`}>
             Unified Content Transformation & UCKR Consistency Engine
           </p>

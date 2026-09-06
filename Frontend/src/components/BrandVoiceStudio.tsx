@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Sliders, Save, Check, ShieldAlert, Sparkles, Tag, Ban, Palette, FileText, Globe, RefreshCw, AlertCircle } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useTheme } from '../context/ThemeContext';
 import { transformApi, BrandVoiceProfile } from '../api/transform';
+import { FAIcon } from './FAIcon';
 
 const DEFAULT_PROFILE: BrandVoiceProfile = {
   brand_name: 'Acme Enterprise Solutions',
@@ -130,7 +130,7 @@ export const BrandVoiceStudio: React.FC = () => {
             className="w-12 h-12 rounded-xl flex items-center justify-center shadow-lg text-black transition-colors"
             style={{ backgroundColor: profile.primary_color || '#1ed760' }}
           >
-            <Sliders className="w-6 h-6" />
+            <FAIcon icon="fa-solid fa-sliders" className="text-xl text-black" />
           </div>
           <div>
             <div className="flex items-center space-x-2">
@@ -158,17 +158,17 @@ export const BrandVoiceStudio: React.FC = () => {
         >
           {isSaving ? (
             <>
-              <RefreshCw className="w-4 h-4 animate-spin" />
+              <FAIcon icon="fa-solid fa-circle-notch fa-spin" className="text-sm" />
               <span>Saving Profile...</span>
             </>
           ) : saveSuccess ? (
             <>
-              <Check className="w-4 h-4" />
+              <FAIcon icon="fa-solid fa-check" className="text-sm" />
               <span>Profile Saved!</span>
             </>
           ) : (
             <>
-              <Save className="w-4 h-4" />
+              <FAIcon icon="fa-solid fa-floppy-disk" className="text-sm" />
               <span>Save Communication Profile</span>
             </>
           )}
@@ -177,7 +177,7 @@ export const BrandVoiceStudio: React.FC = () => {
 
       {error && (
         <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold flex items-center space-x-2">
-          <AlertCircle className="w-4 h-4 shrink-0" />
+          <FAIcon icon="fa-solid fa-triangle-exclamation" className="text-sm shrink-0" />
           <span>{error}</span>
         </div>
       )}

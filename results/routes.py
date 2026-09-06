@@ -46,24 +46,24 @@ def export_results(request: ResultsExportRequest) -> Response:
         content = (
             f'---\ntitle: "{channel}"\n'
             f'date: "{date.today().isoformat()}"\n'
-            'author: "Synthetix AI Content Intelligence Engine"\n'
+            'author: "ContentForge AI Content Intelligence Engine"\n'
             'pipeline: "Unified Content Knowledge Representation (UCKR)"\n'
             f"consistency_score: {score}%\n"
             'fact_attributions: ["F001", "F002", "F003"]\n'
-            f'tags: ["documentation", "synthetix", "ai-generated", "{_safe_filename(channel)}"]\n'
+            f'tags: ["documentation", "contentforge", "ai-generated", "{_safe_filename(channel)}"]\n'
             f"---\n\n{outputs[channel]}\n\n---\n"
-            "Exported from Synthetix AI Content Intelligence Workspace\n"
+            "Exported from ContentForge AI Content Intelligence Workspace\n"
         )
         filename = f"{_safe_filename(channel)}_structured.md"
     else:
         sections = [
-            "Synthetix AI - Aggregated Multi-Channel Deliverables",
+            "ContentForge AI - Aggregated Multi-Channel Deliverables",
             "Generated via Unified Content Knowledge Representation (UCKR)",
         ]
         for title, output in outputs.items():
             sections.extend(["", "---", f"CHANNEL: {title}", "---", "", output])
         content = "\n".join(sections) + "\n"
-        filename = "synthetix_all_deliverables.md"
+        filename = "contentforge_all_deliverables.md"
 
     return Response(
         content=content,

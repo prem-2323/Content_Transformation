@@ -34,7 +34,7 @@ const NOTE_COLORS = [
 export const GoogleKeepWorkspace: React.FC<GoogleKeepWorkspaceProps> = ({ onSendToTransform }) => {
   const { isDarkMode } = useTheme();
   const [notes, setNotes] = useState<Note[]>(() => {
-    const saved = localStorage.getItem('synthetix_google_keep_notes');
+    const saved = localStorage.getItem('contentforge_google_keep_notes') || localStorage.getItem('synthetix_google_keep_notes');
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { }
     }
@@ -69,7 +69,7 @@ export const GoogleKeepWorkspace: React.FC<GoogleKeepWorkspaceProps> = ({ onSend
   const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
 
   useEffect(() => {
-    localStorage.setItem('synthetix_google_keep_notes', JSON.stringify(notes));
+    localStorage.setItem('contentforge_google_keep_notes', JSON.stringify(notes));
     // Also try syncing to Firestore in background
     notes.forEach(async (note) => {
       try {
