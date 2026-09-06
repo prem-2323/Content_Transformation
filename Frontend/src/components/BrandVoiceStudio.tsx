@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
+import { Globe, Tag, Ban, ShieldAlert, Palette, Sparkles, Save, Check, Volume2 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { transformApi, BrandVoiceProfile } from '../api/transform';
 import { FAIcon } from './FAIcon';

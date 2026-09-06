@@ -69,6 +69,7 @@ export default function App() {
 
   const handleRunTransform = async (payload: any, isFile: boolean) => {
     setIsLoading(true);
+    setActiveTab('processing');
     setTransformError(null);
     try {
       let data;
@@ -122,16 +123,13 @@ export default function App() {
       localStorage.setItem('contentforge_transformation_history', JSON.stringify(updatedHistory));
 
       // Do not block the transformation result on an optional Firestore sync.
-      // A missing or unavailable Firebase database must not leave the form in
-      // its loading state after the backend has already returned successfully.
       void setDoc(doc(db, 'history', historyItem.id), historyItem).catch((err) => {
         console.error("Failed to save history to Firestore:", err);
       });
-
-      setActiveTab('processing');
     } catch (error) {
       console.error("Transformation error:", error);
       setTransformError(error instanceof Error ? error.message : 'Transformation failed. Please try again.');
+      setActiveTab('transform');
     } finally {
       setIsLoading(false);
     }

@@ -264,7 +264,7 @@ export const AudienceReframer: React.FC = () => {
 
             <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1 scrollbar-thin">
               {AUDIENCE_PERSONAS.map(persona => {
-                const Icon = persona.icon;
+                const Icon = (persona as any).icon;
                 const isSelected = selectedAudiences.includes(persona.id);
 
                 return (

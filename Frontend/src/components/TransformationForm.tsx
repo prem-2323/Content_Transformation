@@ -480,7 +480,7 @@ export const TransformationForm: React.FC<TransformationFormProps> = ({ onRunTra
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {outputFormatOptions.map((opt) => {
               const isSelected = selectedOutputs.includes(opt.id);
-              const IconComponent = opt.icon;
+              const IconComponent = (opt as any).icon;
               return (
                 <div
                   key={opt.id}
