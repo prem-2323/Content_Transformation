@@ -318,7 +318,8 @@ class ValidationCheckDetail(BaseModel):
 
 class ConsistencyScoreBreakdown(BaseModel):
     fact_consistency: float = Field(..., description="Score for fact preservation (0-100)")
-    numeric_consistency: float = Field(..., description="Score for numbers/percentages/dates (0-100)")
+    numeric_consistency: float = Field(..., description="Score for numbers/percentages (0-100)")
+    temporal_consistency: float = Field(default=100.0, description="Score for dates, years, quarters, deadlines (0-100)")
     entity_consistency: float = Field(..., description="Score for named entities preservation (0-100)")
     claim_consistency: float = Field(..., description="Score for claim preservation & no exaggeration (0-100)")
     semantic_consistency: float = Field(..., description="Score for semantic similarity (0-100)")
@@ -339,11 +340,15 @@ class DetailedValidationReport(BaseModel):
     breakdown: ConsistencyScoreBreakdown
     channel_scores: Dict[str, ChannelConsistencyScore]
     numeric_check: ValidationCheckDetail
+    temporal_check: Optional[ValidationCheckDetail] = Field(default=None)
     entity_check: ValidationCheckDetail
     claim_check: ValidationCheckDetail
     semantic_check: ValidationCheckDetail
     fact_check: ValidationCheckDetail
     cross_output_check: ValidationCheckDetail
+    total_facts: int = Field(default=0, description="Total facts in UCKR registry")
+    verified_facts: int = Field(default=0, description="Facts verified across deliverables")
+    outputs_checked: int = Field(default=0, description="Number of generated deliverable channels checked")
     violations: List[Dict[str, Any]] = Field(default_factory=list)
     traceability_matrix: Dict[str, List[str]] = Field(default_factory=dict)
 

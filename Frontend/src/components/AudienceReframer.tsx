@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Users, Sparkles, Copy, Check, RefreshCw, Briefcase, Code, Globe, GraduationCap, ShoppingBag, Newspaper, Landmark, AlertCircle, FileText, Square, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useTheme } from '../context/ThemeContext';
 import { transformApi, BrandVoiceProfile } from '../api/transform';
@@ -23,7 +22,7 @@ export const AUDIENCE_PERSONAS = [
   {
     id: 'General Public',
     label: 'General Public',
-    faIcon: 'fa-solid fa-earth-americas',
+    faIcon: 'fa-solid fa-globe',
     color: 'from-emerald-500 to-teal-600',
     description: 'Clear non-jargon language, relatable analogies, real-world relevance, easy flow.'
   },
@@ -37,7 +36,7 @@ export const AUDIENCE_PERSONAS = [
   {
     id: 'Customers',
     label: 'Customers & Clients',
-    faIcon: 'fa-solid fa-bag-shopping',
+    faIcon: 'fa-solid fa-shopping-bag',
     color: 'from-pink-500 to-rose-600',
     description: 'Direct user benefits, value proposition, actionable steps, problem-solution focus.'
   },
@@ -133,7 +132,7 @@ export const AudienceReframer: React.FC = () => {
       <div className={`p-6 rounded-2xl border ${isDarkMode ? 'bg-[#181818] border-[#282828]' : 'bg-white border-slate-200 shadow-sm'} flex flex-col md:flex-row items-start md:items-center justify-between gap-4`}>
         <div className="flex items-center space-x-4">
           <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#1ed760] to-emerald-700 flex items-center justify-center shadow-lg shadow-[#1ed760]/20 text-black">
-            <Users className="w-6 h-6" />
+            <FAIcon icon="fa-solid fa-users" className="text-xl" />
           </div>
           <div>
             <div className="flex items-center space-x-2">
@@ -158,7 +157,7 @@ export const AudienceReframer: React.FC = () => {
           <div className={`p-5 rounded-2xl border ${isDarkMode ? 'bg-[#181818] border-[#282828]' : 'bg-white border-slate-200 shadow-sm'} space-y-3`}>
             <div className="flex items-center justify-between">
               <label className={`text-xs font-extrabold uppercase tracking-wider flex items-center space-x-2 ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
-                <FileText className="w-4 h-4 text-[#1ed760]" />
+                <FAIcon icon="fa-solid fa-file-lines" className="text-sm text-[#1ed760]" />
                 <span>Source Document / Text</span>
               </label>
               <button
@@ -185,7 +184,7 @@ export const AudienceReframer: React.FC = () => {
               <span>{sourceText.length} characters | {sourceText.trim() ? sourceText.trim().split(/\s+/).length : 0} words</span>
               {error && (
                 <span className="text-red-400 font-semibold flex items-center space-x-1">
-                  <AlertCircle className="w-3.5 h-3.5 inline mr-1" />
+                  <FAIcon icon="fa-solid fa-circle-exclamation" className="text-xs inline mr-1" />
                   {error}
                 </span>
               )}
@@ -205,7 +204,7 @@ export const AudienceReframer: React.FC = () => {
               <div className={`px-3 py-1 rounded-full border flex items-center space-x-1.5 text-[11px] font-bold ${
                 isDarkMode ? 'bg-[#121212] border-[#282828] text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-700'
               }`}>
-                <Clock className="w-3.5 h-3.5 text-[#1ed760]" />
+                <FAIcon icon="fa-solid fa-clock" className="text-xs text-[#1ed760]" />
                 <span>Est. Time: <strong className="text-[#1ed760]">~{Math.max(2, Math.round((sourceText.trim().split(/\s+/).length / 100) + (selectedAudiences.length * 1.5)))} sec</strong></span>
               </div>
             </div>
@@ -217,7 +216,7 @@ export const AudienceReframer: React.FC = () => {
                   className="px-5 py-3 rounded-xl font-extrabold text-xs uppercase tracking-wider flex items-center space-x-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/40 transition shadow-lg cursor-pointer"
                   title="Stop Reframing"
                 >
-                  <Square className="w-4 h-4 fill-red-400" />
+                  <FAIcon icon="fa-solid fa-stop" className="text-sm text-red-400" />
                   <span>Stop</span>
                 </button>
               ) : (
@@ -230,7 +229,7 @@ export const AudienceReframer: React.FC = () => {
                       : 'bg-[#1ed760] hover:bg-[#1db954] text-black shadow-[#1ed760]/20'
                   }`}
                 >
-                  <Sparkles className="w-4 h-4" />
+                  <FAIcon icon="fa-solid fa-wand-magic-sparkles" className="text-sm" />
                   <span>Reframe for Selected Audiences</span>
                 </button>
               )}
@@ -281,8 +280,8 @@ export const AudienceReframer: React.FC = () => {
                           : 'bg-slate-50 border-slate-200 hover:border-slate-300 opacity-60'
                     }`}
                   >
-                    <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${persona.color} flex items-center justify-center text-white shrink-0 mt-0.5 shadow-sm`}>
-                      <FAIcon icon={persona.faIcon} className="text-xs text-white" />
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 shadow-sm ${isDarkMode ? 'bg-[#282828] text-white' : 'bg-slate-200 text-slate-700'}`}>
+                      <FAIcon icon={persona.faIcon} className="text-xs" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
@@ -317,7 +316,7 @@ export const AudienceReframer: React.FC = () => {
         >
           <div className="flex items-center justify-between border-b border-[#282828] pb-3">
             <h2 className={`text-lg font-bold flex items-center space-x-2 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-              <Sparkles className="w-5 h-5 text-[#1ed760]" />
+              <FAIcon icon="fa-solid fa-wand-magic-sparkles" className="text-lg text-[#1ed760]" />
               <span>Reframed Audience Outputs ({Object.keys(results).length})</span>
             </h2>
 
@@ -357,8 +356,8 @@ export const AudienceReframer: React.FC = () => {
                     <div className="space-y-3">
                       <div className="flex items-center justify-between border-b border-[#282828] pb-3">
                         <div className="flex items-center space-x-2.5">
-                          <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${persona.color} flex items-center justify-center text-white shrink-0 shadow`}>
-                            <FAIcon icon={persona.faIcon || 'fa-solid fa-users'} className="text-xs text-white" />
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow ${isDarkMode ? 'bg-[#282828] text-white' : 'bg-slate-200 text-slate-700'}`}>
+                            <FAIcon icon={persona.faIcon || 'fa-solid fa-users'} className="text-xs" />
                           </div>
                           <div>
                             <h3 className={`text-xs font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
@@ -381,7 +380,7 @@ export const AudienceReframer: React.FC = () => {
                           }`}
                           title="Copy Output"
                         >
-                          {copiedKey === audience ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                          {copiedKey === audience ? <FAIcon icon="fa-solid fa-check" className="text-sm" /> : <FAIcon icon="fa-regular fa-copy" className="text-sm" />}
                         </button>
                       </div>
 
@@ -434,7 +433,7 @@ export const AudienceReframer: React.FC = () => {
                       onClick={() => handleCopy(activeTab, results[activeTab])}
                       className="px-3 py-1.5 rounded-lg bg-[#1ed760]/20 hover:bg-[#1ed760]/30 text-[#1ed760] font-bold text-xs flex items-center space-x-1.5 border border-[#1ed760]/40 transition"
                     >
-                      {copiedKey === activeTab ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      {copiedKey === activeTab ? <FAIcon icon="fa-solid fa-check" className="text-sm" /> : <FAIcon icon="fa-regular fa-copy" className="text-sm" />}
                       <span>{copiedKey === activeTab ? 'Copied!' : 'Copy to Clipboard'}</span>
                     </button>
                   </div>

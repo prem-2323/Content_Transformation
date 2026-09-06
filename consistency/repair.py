@@ -78,14 +78,39 @@ class AutoRepairEngine:
 
         for v in report.violations:
             ch_name = v.get("channel")
+            fact_id = v.get("fact_id", "F001")
+            source_fact = facts_map.get(fact_id, uckr.facts[0] if uckr.facts else None)
+            source_fact_text = source_fact.statement if source_fact else ""
+
+            # Handle missing fact auto-repair
+            if v.get("type") == "missing_fact" or ch_name == "all":
+                target_channels = list(repaired_outputs.keys()) if ch_name == "all" else [ch_name]
+                for target_ch in target_channels:
+                    if target_ch in repaired_outputs and source_fact_text:
+                        if isinstance(repaired_outputs[target_ch], str):
+                            repaired_outputs[target_ch] += f" [{fact_id}] {source_fact_text}"
+                        elif isinstance(repaired_outputs[target_ch], dict):
+                            repaired_outputs[target_ch]["text"] = str(repaired_outputs[target_ch].get("text", "")) + f" [{fact_id}] {source_fact_text}"
+                            if "source_facts" in repaired_outputs[target_ch]:
+                                if fact_id not in repaired_outputs[target_ch]["source_facts"]:
+                                    repaired_outputs[target_ch]["source_facts"].append(fact_id)
+
+                attempts.append(RepairAttempt(
+                    channel=ch_name,
+                    target_item="missing_fact",
+                    problematic_text="Missing fact from deliverable",
+                    fact_id=fact_id,
+                    expected_value=source_fact_text,
+                    repaired_text=f"Appended fact [{fact_id}]",
+                    success=True
+                ))
+                continue
+
             if not ch_name or ch_name not in repaired_outputs:
                 continue
 
             expected_val = v.get("expected")
             found_val = v.get("found")
-            fact_id = v.get("fact_id", "F001")
-            source_fact = facts_map.get(fact_id, uckr.facts[0] if uckr.facts else None)
-            source_fact_text = source_fact.statement if source_fact else ""
 
             if expected_val and found_val and isinstance(expected_val, str) and isinstance(found_val, str):
                 # Deterministic precision swap

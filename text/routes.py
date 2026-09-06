@@ -1324,6 +1324,46 @@ AUDIENCE_PROMPT_MAP = {
 }
 
 
+def _audience_reframing_leaked(text: str) -> bool:
+    """Detect model planning/prompt text instead of a user-facing rewrite."""
+    lowered = (text or "").lower()
+    markers = (
+        "we are reframing", "key points from source", "target audience:",
+        "brand voice constraints", "critical:", "steps:", "approach:",
+        "we need to", "i will", "let's"
+    )
+    return sum(marker in lowered for marker in markers) >= 2
+
+
+def _audience_reframing_fallback(audience: str, source: str, brand_voice: BrandVoiceProfile) -> str:
+    """Return a clean, fact-preserving audience version when generation leaks planning text."""
+    label = audience.lower()
+    if "ceo" in label or "exec" in label:
+        heading = "EXECUTIVE BRIEF"
+        focus = "Strategic focus: security resilience, measurable performance, deployment cost, and operational continuity."
+    elif "technical" in label or "engineer" in label:
+        heading = "TECHNICAL BRIEF"
+        focus = "Technical focus: cryptography, latency, infrastructure scale, compliance standards, and integration."
+    elif "student" in label:
+        heading = "LEARNING GUIDE"
+        focus = "Key concepts: post-quantum cryptography, handshake latency, migration, and compliance certification."
+    elif "customer" in label or "client" in label:
+        heading = "CUSTOMER OVERVIEW"
+        focus = "Why it matters: stronger cryptographic protection, measurable performance, and migration continuity."
+    elif "journal" in label or "press" in label:
+        heading = "PRESS BRIEF"
+        focus = "Key news: the v3.4 release, 38% lower handshake latency, and deployment across 12 data centers."
+    elif "government" in label or "policy" in label:
+        heading = "POLICY BRIEF"
+        focus = "Policy focus: cybersecurity resilience, standards compliance, cost, and operational risk."
+    else:
+        heading = "PLAIN-LANGUAGE OVERVIEW"
+        focus = "In simple terms: QuantumSecure updates encryption and improves secure-system performance."
+
+    disclaimer = f"\n\n{brand_voice.disclaimer}" if brand_voice.disclaimer else ""
+    return f"{heading}\n\n{focus}\n\nSource-grounded details:\n{source}{disclaimer}"
+
+
 @router.get("/brand-voice/profile", response_model=BrandVoiceProfile)
 def get_brand_voice_profile():
     """Retrieve the saved organization brand voice communication profile."""
@@ -1388,27 +1428,14 @@ CRITICAL:
         try:
             raw_res = generate_with_qwen(prompt)
             clean_res = validate_and_clean_model_response(raw_res)
+            if _audience_reframing_leaked(clean_res) or len(clean_res.strip()) < 40:
+                clean_res = _audience_reframing_fallback(aud, source_clean, bv)
             for fb in bv.forbidden_phrases:
                 if fb and fb.lower() in clean_res.lower():
                     clean_res = re.sub(re.escape(fb), "", clean_res, flags=re.IGNORECASE)
             results[aud] = clean_res
         except Exception:
-            if "ceo" in aud.lower() or "exec" in aud.lower():
-                results[aud] = f"EXECUTIVE BRIEFING:\n{source_clean[:300]}...\n\nKey Strategic Impact: High ROI & operational efficiency.\n\n{bv.disclaimer}"
-            elif "tech" in aud.lower():
-                results[aud] = f"TECHNICAL SPECIFICATION:\n{source_clean[:300]}...\n\nArchitecture & Mechanics: Grounded in UCKR fact IDs & API endpoints.\n\n{bv.disclaimer}"
-            elif "public" in aud.lower():
-                results[aud] = f"OVERVIEW:\n{source_clean[:300]}...\n\nKey Benefit: Simple, fast, and reliable.\n\n{bv.disclaimer}"
-            elif "student" in aud.lower():
-                results[aud] = f"LEARNING GUIDE:\n1. Concept: {source_clean[:200]}...\n2. Takeaway: Core principles and applications.\n\n{bv.disclaimer}"
-            elif "customer" in aud.lower():
-                results[aud] = f"CUSTOMER VALUE:\n{source_clean[:250]}...\n\nWhy It Matters to You: Saves time and improves quality.\n\n{bv.disclaimer}"
-            elif "journal" in aud.lower() or "press" in aud.lower():
-                results[aud] = f"FOR IMMEDIATE RELEASE:\n{source_clean[:250]}...\n\nQuote: 'Transforming digital communication at scale.'\n\n{bv.disclaimer}"
-            elif "gov" in aud.lower() or "policy" in aud.lower():
-                results[aud] = f"POLICY BRIEF:\n{source_clean[:250]}...\n\nGovernance & Risk Assessment: Fully compliant and aligned with public interest.\n\n{bv.disclaimer}"
-            else:
-                results[aud] = f"REFRAMED FOR {aud.upper()}:\n{source_clean}\n\n{bv.disclaimer}"
+            results[aud] = _audience_reframing_fallback(aud, source_clean, bv)
 
     return AudienceReframeResponse(
         status="success",

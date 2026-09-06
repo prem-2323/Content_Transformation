@@ -153,20 +153,108 @@ def compute_semantic_similarity(s1: str, s2: str) -> float:
     return round(min(1.0, max(0.0, similarity)), 3)
 
 
+# Configurable weights for weighted aggregate score (sum = 1.0)
+FACT_WEIGHT = 0.20
+NUMERIC_WEIGHT = 0.20
+TEMPORAL_WEIGHT = 0.10
+ENTITY_WEIGHT = 0.15
+CLAIM_WEIGHT = 0.20
+SEMANTIC_WEIGHT = 0.15
+
+
+def _extract_dates_and_temporal(text: str) -> Set[str]:
+    """Extract years, quarters (Q1-Q4 202X), financial periods, and deadlines from text."""
+    if not text:
+        return set()
+    patterns = [
+        r"\bQ[1-4]\s*(?:20\d{2})?\b",                  # Quarters: Q4, Q4 2026, Q3 2025
+        r"\b(?:19|20)\d{2}\b",                         # Years: 2025, 2026
+        r"\b(?:FY|H[12])\s*20\d{2}\b",                 # Fiscal year / Half year: FY2026, H1 2025
+        r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*\d{1,2}(?:st|nd|rd|th)?,\s*20\d{2}\b" # Full dates
+    ]
+    matches = set()
+    for pat in patterns:
+        for m in re.finditer(pat, text, flags=re.IGNORECASE):
+            raw = m.group(0).strip()
+            # Normalize spaces
+            clean = re.sub(r"\s+", " ", raw)
+            matches.add(clean)
+    return matches
+
+
+class TemporalValidator:
+    """Step 14b: Date, Quarter, Year, and Temporal Period Validator."""
+
+    @staticmethod
+    def validate(uckr: UCKR, outputs: Dict[str, Any]) -> ValidationCheckDetail:
+        source_dates: Set[str] = set()
+        for fact in uckr.facts:
+            source_dates.update(_extract_dates_and_temporal(fact.statement))
+        for stat in uckr.statistics:
+            source_dates.update(_extract_dates_and_temporal(stat.value))
+            source_dates.update(_extract_dates_and_temporal(stat.context))
+
+        violations: List[Dict[str, Any]] = []
+        found_in_outputs: Set[str] = set()
+
+        for ch_name, ch_data in outputs.items():
+            ch_text = _extract_text_content(ch_data)
+            ch_dates = _extract_dates_and_temporal(ch_text)
+            found_in_outputs.update(ch_dates)
+
+            # Check for temporal mismatches: e.g. Q4 2026 vs Q3 2026
+            for s_date in source_dates:
+                # Quarters check
+                s_q_match = re.search(r"Q([1-4])", s_date, re.IGNORECASE)
+                if s_q_match:
+                    expected_q = s_q_match.group(0).upper()
+                    for cd in ch_dates:
+                        cd_q_match = re.search(r"Q([1-4])", cd, re.IGNORECASE)
+                        if cd_q_match and cd_q_match.group(0).upper() != expected_q and cd not in source_dates:
+                            violations.append({
+                                "channel": ch_name,
+                                "type": "temporal_conflict",
+                                "fact_id": "F001",
+                                "expected": s_date,
+                                "found": cd,
+                                "output": ch_name,
+                                "message": f"Temporal mismatch in {ch_name}: expected '{s_date}', found '{cd}'"
+                            })
+
+        score = 100.0
+        if violations:
+            penalty = len(violations) * 35.0
+            score = max(0.0, 100.0 - penalty)
+
+        return ValidationCheckDetail(
+            passed=len(violations) == 0,
+            score=round(score, 1),
+            expected=sorted(list(source_dates)),
+            found=sorted(list(found_in_outputs)),
+            violations=violations
+        )
+
+
 class NumericValidator:
-    """Step 14: Strict numeric, percentage, date, and currency validator."""
+    """Step 14: Strict numeric, percentage, and quantitative validator."""
 
     @staticmethod
     def validate(uckr: UCKR, outputs: Dict[str, Any]) -> ValidationCheckDetail:
         source_numbers: Set[str] = set()
-        for stat in uckr.statistics:
-            source_numbers.update(_extract_numbers_and_metrics(stat.value))
-            source_numbers.update(_extract_numbers_and_metrics(stat.context))
-
+        facts_map = {}
         for fact in uckr.facts:
-            source_numbers.update(_extract_numbers_and_metrics(fact.statement))
+            extracted = _extract_numbers_and_metrics(fact.statement)
+            source_numbers.update(extracted)
+            for n in extracted:
+                facts_map[n] = fact.id
 
-        # Filter out trivial 1-digit numbers (like 1, 2)
+        for stat in uckr.statistics:
+            extracted = _extract_numbers_and_metrics(stat.value)
+            source_numbers.update(extracted)
+            for n in extracted:
+                facts_map[n] = stat.id
+
+        # Filter out trivial 1-digit numbers (like 1, 2) unless percentage/currency
         key_numbers = {n for n in source_numbers if len(n) > 1 or "%" in n or "$" in n}
 
         violations: List[Dict[str, Any]] = []
@@ -177,28 +265,25 @@ class NumericValidator:
             ch_numbers = _extract_numbers_and_metrics(ch_text)
             found_in_outputs.update(ch_numbers)
 
-            # Check for mutated numbers: if a number is present that is close to a source number but different
+            # Check for mutated numbers: percentage or metric mismatches
             for s_num in key_numbers:
-                s_digits = re.sub(r"[^\d]", "", s_num)
-                if not s_digits:
-                    continue
-                # If s_num has percentage, look for conflicting percentages
                 if "%" in s_num:
                     ch_percents = {cn for cn in ch_numbers if "%" in cn}
                     for cn in ch_percents:
                         if cn != s_num and cn not in key_numbers:
                             violations.append({
                                 "channel": ch_name,
-                                "type": "numeric_mismatch",
+                                "type": "numeric_conflict",
+                                "fact_id": facts_map.get(s_num, "F002"),
                                 "expected": s_num,
                                 "found": cn,
-                                "message": f"Percentage mismatch in {ch_name}: expected '{s_num}', found '{cn}'"
+                                "output": ch_name,
+                                "message": f"Numeric conflict in {ch_name}: expected '{s_num}', found '{cn}'"
                             })
 
-        # Calculate score: percentage of expected numbers accurately maintained without unauthorized mutations
         score = 100.0
         if violations:
-            penalty = len(violations) * 15.0
+            penalty = len(violations) * 40.0
             score = max(0.0, 100.0 - penalty)
 
         return ValidationCheckDetail(
@@ -215,24 +300,46 @@ class EntityValidator:
 
     @staticmethod
     def validate(uckr: UCKR, outputs: Dict[str, Any]) -> ValidationCheckDetail:
-        source_entities = [e.name for e in uckr.entities]
+        source_entities = {e.name: e.id for e in uckr.entities}
         violations: List[Dict[str, Any]] = []
         found_entities: Set[str] = set()
 
         for ch_name, ch_data in outputs.items():
             ch_text = _extract_text_content(ch_data)
-            for ent in source_entities:
-                if ent.lower() in ch_text.lower():
-                    found_entities.add(ent)
+            for ent_name, ent_id in source_entities.items():
+                if ent_name.lower() in ch_text.lower():
+                    found_entities.add(ent_name)
 
-        # Entity coverage across outputs
+            # Check for common entity mutations (e.g. ContentForge AI -> ContentFlow AI)
+            for ent_name, ent_id in source_entities.items():
+                words = ent_name.split()
+                if len(words) > 1:
+                    first_word = words[0]
+                    # Search for mutated brand names
+                    mutations = re.findall(r"\b" + re.escape(first_word[:5]) + r"\w+\s+AI\b", ch_text, re.IGNORECASE)
+                    for mut in mutations:
+                        if mut.lower() != ent_name.lower() and mut.lower() not in [e.lower() for e in source_entities]:
+                            violations.append({
+                                "channel": ch_name,
+                                "type": "entity_conflict",
+                                "fact_id": ent_id,
+                                "expected": ent_name,
+                                "found": mut,
+                                "output": ch_name,
+                                "message": f"Entity conflict in {ch_name}: expected '{ent_name}', found '{mut}'"
+                            })
+
+        # Entity coverage score calculation
         coverage = len(found_entities) / max(1, len(source_entities))
         score = round(coverage * 100.0, 1)
 
+        if violations:
+            score = max(0.0, score - (len(violations) * 30.0))
+
         return ValidationCheckDetail(
-            passed=score >= 70.0,
-            score=score,
-            expected=source_entities,
+            passed=len(violations) == 0 and score >= 80.0,
+            score=round(score, 1),
+            expected=list(source_entities.keys()),
             found=sorted(list(found_entities)),
             violations=violations
         )
@@ -255,11 +362,14 @@ class ClaimValidator:
                     violations.append({
                         "channel": ch_name,
                         "type": "exaggerated_claim",
-                        "marker": marker,
-                        "message": f"Exaggerated or unverified assertion '{marker}' in {ch_name}."
+                        "fact_id": "C001",
+                        "expected": "Grounded assertion",
+                        "found": marker,
+                        "output": ch_name,
+                        "message": f"Exaggerated claim '{marker}' in {ch_name}."
                     })
 
-        score = max(0.0, 100.0 - (len(violations) * 20.0))
+        score = max(0.0, 100.0 - (len(violations) * 25.0))
         return ValidationCheckDetail(
             passed=len(violations) == 0,
             score=round(score, 1),
@@ -285,38 +395,45 @@ class SemanticValidator:
             if not sentences:
                 sentences = [ch_text]
 
-            # Check which facts this channel explicitly cited or used
             cited_facts = set()
             if isinstance(ch_data, dict):
                 cited_facts.update(ch_data.get("source_facts", []))
-                for s in ch_data.get("slides", []):
-                    cited_facts.update(s.get("source_facts", []))
-                for sc in ch_data.get("storyboard", []):
-                    cited_facts.update(sc.get("source_facts", []))
 
             target_facts = [f for f in top_facts if f.id in cited_facts] or top_facts[:2]
 
             for fact in target_facts:
-                # Find best matching sentence in output
-                sims = [compute_semantic_similarity(fact.statement, sent) for sent in sentences]
-                sims.append(compute_semantic_similarity(fact.statement, ch_text))
-                max_sim = max(sims) if sims else 0.0
+                # Check for explicit fact ID citation or matching metrics
+                if fact.id in ch_text or f"[{fact.id}]" in ch_text:
+                    max_sim = 1.0
+                else:
+                    fact_nums = {n for n in _extract_numbers_and_metrics(fact.statement) if len(n) > 1 or "%" in n or "$" in n}
+                    ch_nums = _extract_numbers_and_metrics(ch_text)
+                    if fact_nums and fact_nums.issubset(ch_nums):
+                        max_sim = 0.95
+                    else:
+                        sims = [compute_semantic_similarity(fact.statement, sent) for sent in sentences]
+                        sims.append(compute_semantic_similarity(fact.statement, ch_text))
+                        max_sim = max(sims) if sims else 0.0
+
                 similarities.append(max_sim)
 
                 if max_sim < 0.25 and fact.importance >= 0.9:
                     violations.append({
                         "channel": ch_name,
+                        "type": "weak_semantic_grounding",
                         "fact_id": fact.id,
-                        "similarity": max_sim,
-                        "message": f"Critical fact [{fact.id}] '{fact.statement[:40]}...' weakly represented in {ch_name} (sim={max_sim})"
+                        "expected": fact.statement,
+                        "found": f"Similarity={max_sim}",
+                        "output": ch_name,
+                        "message": f"Fact [{fact.id}] weakly represented in {ch_name} (sim={max_sim})"
                     })
 
-        avg_sim = (sum(similarities) / max(1, len(similarities))) if similarities else 0.85
-        # Scale to 0-100
-        score = round(min(100.0, max(60.0, (avg_sim * 100.0) + 20.0)), 1)
+        avg_sim = (sum(similarities) / max(1, len(similarities))) if similarities else 1.0
+        # Dynamic un-clamped 0-100 conversion
+        score = round(min(100.0, max(0.0, avg_sim * 100.0)), 1)
 
         return ValidationCheckDetail(
-            passed=score >= 75.0,
+            passed=score >= 70.0,
             score=score,
             expected=[f.statement for f in top_facts],
             found=[f"Evaluated {len(similarities)} semantic fact alignments"],
@@ -332,9 +449,8 @@ class CrossOutputValidator:
         multi_channel_facts = [fid for fid, channels in fact_matrix.items() if len(channels) >= 2]
         cited_facts = [fid for fid, channels in fact_matrix.items() if len(channels) >= 1]
         
-        # Ratio of cited facts that are consistent across 2+ channels
         ratio = (len(multi_channel_facts) / max(1, len(cited_facts))) if cited_facts else 1.0
-        score = round(min(100.0, max(75.0, ratio * 100.0)), 1)
+        score = round(min(100.0, max(0.0, ratio * 100.0)), 1)
 
         return ValidationCheckDetail(
             passed=score >= 70.0,
@@ -347,15 +463,8 @@ class CrossOutputValidator:
 
 class ConsistencyValidator:
     """
-    Master consistency validator computing the full breakdown:
-    - Fact consistency
-    - Numeric consistency
-    - Entity consistency
-    - Claim consistency
-    - Semantic consistency
-    - Cross-output consistency
-    - Per-channel scores (Summary, LinkedIn, Presentation, Video)
-    - Overall consistency score
+    Master consistency validator computing real, weighted aggregate breakdown scores:
+    Fact Preservation (0.20) + Numeric (0.20) + Temporal (0.10) + Entity (0.15) + Claim (0.20) + Semantic (0.15) = 1.0
     """
 
     @classmethod
@@ -366,45 +475,57 @@ class ConsistencyValidator:
         fact_matrix: Dict[str, List[str]]
     ) -> DetailedValidationReport:
         numeric_res = NumericValidator.validate(uckr, outputs)
+        temporal_res = TemporalValidator.validate(uckr, outputs)
         entity_res = EntityValidator.validate(uckr, outputs)
         claim_res = ClaimValidator.validate(uckr, outputs)
         semantic_res = SemanticValidator.validate(uckr, outputs)
         cross_res = CrossOutputValidator.validate(uckr, outputs, fact_matrix)
 
-        # Fact preservation & integrity score (100 if all cited facts are valid and grounded)
+        # Real Fact Preservation calculation: Verified Facts / Total Required Facts * 100
         cited_facts = {fid for fid, channels in fact_matrix.items() if channels}
         valid_uckr_ids = {f.id for f in uckr.facts}
         valid_citations = cited_facts & valid_uckr_ids
-        integrity_ratio = len(valid_citations) / max(1, len(cited_facts)) if cited_facts else 1.0
-        coverage_ratio = len(cited_facts) / max(1, len(uckr.facts))
-        fact_score = round(min(100.0, (integrity_ratio * 75.0) + (coverage_ratio * 25.0)), 1)
+        
+        total_facts_count = max(1, len(uckr.facts))
+        verified_facts_count = len(valid_citations)
+        fact_score = round(min(100.0, (verified_facts_count / total_facts_count) * 100.0), 1)
+
+        missing_facts_violations = []
+        unrepresented_facts = valid_uckr_ids - valid_citations
+        for m_fid in unrepresented_facts:
+            missing_facts_violations.append({
+                "channel": "all",
+                "type": "missing_fact",
+                "fact_id": m_fid,
+                "expected": f"Fact {m_fid} included in deliverables",
+                "found": "Missing in all channels",
+                "message": f"Source fact {m_fid} missing from generated deliverables."
+            })
 
         fact_check = ValidationCheckDetail(
-            passed=fact_score >= 60.0,
+            passed=fact_score >= 66.0,
             score=fact_score,
             expected=[f.id for f in uckr.facts],
-            found=sorted(list(cited_facts)),
-            violations=[]
+            found=sorted(list(valid_citations)),
+            violations=missing_facts_violations
         )
 
-        # Entity score normalization
-        entity_score = max(75.0, entity_res.score)
-
-        # Weighted aggregate score
+        # Weighted aggregate score (weights sum to 1.0)
         overall = round(
-            (fact_score * 0.25) +
-            (numeric_res.score * 0.25) +
-            (entity_score * 0.15) +
-            (claim_res.score * 0.15) +
-            (semantic_res.score * 0.10) +
-            (cross_res.score * 0.10),
+            (fact_score * FACT_WEIGHT) +
+            (numeric_res.score * NUMERIC_WEIGHT) +
+            (temporal_res.score * TEMPORAL_WEIGHT) +
+            (entity_res.score * ENTITY_WEIGHT) +
+            (claim_res.score * CLAIM_WEIGHT) +
+            (semantic_res.score * SEMANTIC_WEIGHT),
             1
         )
 
         breakdown = ConsistencyScoreBreakdown(
             fact_consistency=fact_score,
             numeric_consistency=numeric_res.score,
-            entity_consistency=entity_score,
+            temporal_consistency=temporal_res.score,
+            entity_consistency=entity_res.score,
             claim_consistency=claim_res.score,
             semantic_consistency=semantic_res.score,
             cross_output_consistency=cross_res.score,
@@ -412,20 +533,27 @@ class ConsistencyValidator:
         )
 
         # Channel specific scores
-        channel_scores: Dict[str, ChannelConsistencyScore] = {}
-        all_violations = numeric_res.violations + claim_res.violations + semantic_res.violations
+        all_violations = (
+            numeric_res.violations + 
+            temporal_res.violations + 
+            entity_res.violations + 
+            claim_res.violations + 
+            semantic_res.violations + 
+            missing_facts_violations
+        )
 
+        channel_scores: Dict[str, ChannelConsistencyScore] = {}
         for ch in outputs.keys():
-            ch_viols = [v["message"] for v in all_violations if v.get("channel") == ch]
-            ch_score = round(max(70.0, overall - (len(ch_viols) * 8.0)), 1)
+            ch_viols = [v["message"] for v in all_violations if v.get("channel") in (ch, "all")]
+            ch_score = round(max(0.0, overall - (len(ch_viols) * 15.0)), 1)
             channel_scores[ch] = ChannelConsistencyScore(
                 channel=ch,
                 score=ch_score,
-                status="PASS" if ch_score >= 75.0 else "WARNING",
+                status="PASS" if ch_score >= 80.0 else ("WARNING" if ch_score >= 60.0 else "FAIL"),
                 violations=ch_viols
             )
 
-        passed = overall >= 80.0 and numeric_res.passed and claim_res.passed
+        passed = overall >= 80.0 and len(all_violations) == 0
 
         return DetailedValidationReport(
             passed=passed,
@@ -433,11 +561,15 @@ class ConsistencyValidator:
             breakdown=breakdown,
             channel_scores=channel_scores,
             numeric_check=numeric_res,
+            temporal_check=temporal_res,
             entity_check=entity_res,
             claim_check=claim_res,
             semantic_check=semantic_res,
             fact_check=fact_check,
             cross_output_check=cross_res,
+            total_facts=len(uckr.facts),
+            verified_facts=verified_facts_count,
+            outputs_checked=len(outputs),
             violations=all_violations,
             traceability_matrix=fact_matrix
         )

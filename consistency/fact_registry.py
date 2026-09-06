@@ -1,3 +1,4 @@
+import re
 import logging
 from typing import Dict, List, Any, Optional, Set
 from .schemas import FactItem, UCKR, ConsistencyAuditResult
@@ -82,65 +83,25 @@ class FactRegistry:
             else:
                 invalid_ids.add(fid)
 
-        # 1. Summary
-        if "summary" in outputs:
-            s_data = outputs["summary"]
-            s_facts = s_data.get("source_facts", []) if isinstance(s_data, dict) else []
-            for fid in s_facts:
-                _record_citation(fid, "summary")
+        # Universal citation extractor helper
+        def _extract_citations_from_value(val: Any) -> Set[str]:
+            c_set = set()
+            if isinstance(val, str):
+                for match in re.findall(r"\b(F\d+)\b", val):
+                    c_set.add(match)
+            elif isinstance(val, list):
+                for item in val:
+                    c_set.update(_extract_citations_from_value(item))
+            elif isinstance(val, dict):
+                for k, v in val.items():
+                    c_set.update(_extract_citations_from_value(v))
+            return c_set
 
-        # 2. LinkedIn
-        if "linkedin" in outputs:
-            l_data = outputs["linkedin"]
-            l_facts = l_data.get("source_facts", []) if isinstance(l_data, dict) else []
-            for fid in l_facts:
-                _record_citation(fid, "linkedin")
-
-        # 3. Presentation
-        if "presentation" in outputs:
-            p_data = outputs["presentation"]
-            if isinstance(p_data, dict):
-                top_facts = p_data.get("source_facts", [])
-                for fid in top_facts:
-                    _record_citation(fid, "presentation")
-                for s in p_data.get("slides", []):
-                    s_num = s.get("slide_number", 1)
-                    for fid in s.get("source_facts", []):
-                        _record_citation(fid, f"presentation_slide_{s_num}")
-
-        # 4. Video
-        if "video" in outputs:
-            v_data = outputs["video"]
-            if isinstance(v_data, dict):
-                top_facts = v_data.get("source_facts", [])
-                for fid in top_facts:
-                    _record_citation(fid, "video")
-                for sc in v_data.get("storyboard", []):
-                    sc_num = sc.get("scene_number", 1)
-                    for fid in sc.get("source_facts", []):
-                        _record_citation(fid, f"video_scene_{sc_num}")
-
-        # 5. Twitter
-        if "twitter" in outputs:
-            t_data = outputs["twitter"]
-            if isinstance(t_data, dict):
-                for fid in t_data.get("source_facts", []):
-                    _record_citation(fid, "twitter")
-                for tw in t_data.get("thread", []):
-                    tw_num = tw.get("tweet_number", 1)
-                    for fid in tw.get("source_facts", []):
-                        _record_citation(fid, f"tweet_{tw_num}")
-
-        # 6. Advisory
-        if "advisory" in outputs:
-            a_data = outputs["advisory"]
-            if isinstance(a_data, dict):
-                for fid in a_data.get("source_facts", []):
-                    _record_citation(fid, "advisory")
-                for sec in a_data.get("sections", []):
-                    h_name = sec.get("heading", "section")
-                    for fid in sec.get("source_facts", []):
-                        _record_citation(fid, f"advisory_{h_name}")
+        # Inspect all outputs dynamically
+        for ch_key, ch_val in outputs.items():
+            found_ids = _extract_citations_from_value(ch_val)
+            for fid in found_ids:
+                _record_citation(fid, ch_key)
 
         cited_count = len(all_cited_ids)
         coverage_pct = round((cited_count / max(1, total_facts)) * 100, 2)
