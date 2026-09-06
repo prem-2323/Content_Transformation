@@ -6,7 +6,7 @@ import { ProcessingView } from './components/ProcessingView';
 import { ResultsWorkspace } from './components/ResultsWorkspace';
 import { ContentIntelligence } from './components/ContentIntelligence';
 import { HistoryWorkspace } from './components/HistoryWorkspace';
-import { GeneralChatbot } from './components/GeneralChatbot';
+import { SmartChatbot } from './components/SmartChatbot';
 import { ApiExplorer } from './components/ApiExplorer';
 import { MultimodalPdfStudio } from './components/MultimodalPdfStudio';
 import { VisualStudioWrapper } from './components/VisualStudioWrapper';
@@ -295,7 +295,7 @@ export default function App() {
               )}
 
               {activeTab === 'chatbot' && (
-                <GeneralChatbot />
+                <SmartChatbot />
               )}
 
               {activeTab === 'history' && (

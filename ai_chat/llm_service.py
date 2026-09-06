@@ -1,17 +1,23 @@
 import json
+import os
 from typing import AsyncGenerator
 
 import httpx
 
 
+DEFAULT_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:4b")
+DEFAULT_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "60.0"))
+DEFAULT_URL = os.getenv("OLLAMA_URL", "http://localhost:11434").replace("/api/generate", "")
+
+
 class LocalLLM:
-    """Async client for Ollama's local LLM API. No API keys required."""
+    """Async client for Ollama's local LLM API with resilient fallback."""
 
     def __init__(
         self,
-        model: str = "qwen3:4b",
-        ollama_url: str = "http://localhost:11434",
-        timeout_seconds: float = 25.0,
+        model: str = DEFAULT_MODEL,
+        ollama_url: str = DEFAULT_URL,
+        timeout_seconds: float = DEFAULT_TIMEOUT,
     ):
         self.model = model
         self.ollama_url = ollama_url
@@ -55,7 +61,7 @@ class LocalLLM:
         messages: list[dict],
         system_prompt: str
     ) -> str:
-        """Non-streaming generation (kept for backward compat)."""
+        """Non-streaming generation with fallback on timeout."""
 
         payload = {
             "model": self.model,
@@ -70,15 +76,28 @@ class LocalLLM:
             }
         }
 
-        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-            response = await client.post(
-                f"{self.ollama_url}/api/chat",
-                json=payload
-            )
-            response.raise_for_status()
-            data = response.json()
-
-        return data["message"]["content"]
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                response = await client.post(
+                    f"{self.ollama_url}/api/chat",
+                    json=payload
+                )
+                response.raise_for_status()
+                data = response.json()
+            return data["message"]["content"]
+        except (httpx.TimeoutException, httpx.HTTPError, Exception) as exc:
+            # Fallback to direct prompt generation via text.qwen_service
+            try:
+                from text.qwen_service import generate_with_qwen
+                user_msg = ""
+                for m in reversed(messages):
+                    if m.get("role") == "user":
+                        user_msg = m.get("content", "")
+                        break
+                combined_prompt = f"{system_prompt}\n\nUser: {user_msg}"
+                return generate_with_qwen(combined_prompt, timeout=self.timeout_seconds)
+            except Exception:
+                raise exc
 
     async def stream(
         self,
@@ -100,20 +119,29 @@ class LocalLLM:
             }
         }
 
-        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-            async with client.stream(
-                "POST",
-                f"{self.ollama_url}/api/chat",
-                json=payload
-            ) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if not line.strip():
-                        continue
-                    try:
-                        chunk = json.loads(line)
-                        content = chunk.get("message", {}).get("content", "")
-                        if content:
-                            yield content
-                    except json.JSONDecodeError:
-                        continue
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                async with client.stream(
+                    "POST",
+                    f"{self.ollama_url}/api/chat",
+                    json=payload
+                ) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if not line.strip():
+                            continue
+                        try:
+                            chunk = json.loads(line)
+                            content = chunk.get("message", {}).get("content", "")
+                            if content:
+                                yield content
+                        except json.JSONDecodeError:
+                            continue
+        except (httpx.TimeoutException, httpx.HTTPError, Exception):
+            # Fallback to non-streaming generate
+            try:
+                full_text = await self.generate(messages, system_prompt)
+                yield full_text
+            except Exception:
+                yield "I encountered a timeout connecting to the local LLM. Please make sure Ollama is running (`ollama run qwen3:4b`)."
+

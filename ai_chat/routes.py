@@ -1,14 +1,17 @@
 import re
+import traceback
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from .chat_models import (
     ChatRequest,
-    ChatResponse
+    ChatResponse,
+    SmartActionRequest,
+    SmartActionResponse,
 )
 
-from .content_router import detect_intent
+from .content_router import detect_intent, ACTION_INTENTS
 from .llm_service import LocalLLM
 
 
@@ -18,10 +21,7 @@ router = APIRouter(
 )
 
 
-llm = LocalLLM(
-    model="gemma3:4b",
-    timeout_seconds=25.0,
-)
+llm = LocalLLM()
 
 
 BASE_SYSTEM_PROMPT = """
@@ -251,7 +251,7 @@ create a concise thread.
 Keep the content factual.
 """
 
-    elif intent == "presentation":
+    elif intent in ("presentation", "make_presentation"):
 
         prompt += """
 
@@ -270,7 +270,7 @@ Visual Recommendation
 Keep information consistent with the source.
 """
 
-    elif intent == "video":
+    elif intent in ("video", "video_plan"):
 
         prompt += """
 
@@ -335,7 +335,7 @@ Risk Considerations
 Conclusion
 """
 
-    elif intent == "fact_check":
+    elif intent in ("fact_check", "consistency_check"):
 
         prompt += """
 
@@ -543,3 +543,369 @@ Use this context when it is relevant. Preserve its facts and say when it does no
             intent=intent,
             model=llm.model,
         )
+
+
+# ---------------------------------------------------------------------------
+# Smart Action — unified endpoint that detects intent and routes to APIs
+# ---------------------------------------------------------------------------
+
+
+def _extract_source_text(message: str) -> str:
+    """Pull the 'subject' from the user message, stripping command prefixes."""
+    # Remove common action prefixes to get the raw content
+    cleaned = re.sub(
+        r"^(generate|create|make|build|produce|write|transform|rewrite|convert|"
+        r"summarize|summarise|design|draw|plan|check|analyze|analyse|score|"
+        r"evaluate|read|narrate|speak|export)\s+(a\s+|an\s+|me\s+|this\s+)?",
+        "",
+        message.strip(),
+        flags=re.IGNORECASE,
+    )
+    # Also strip trailing intent hints
+    cleaned = re.sub(
+        r"\s+(image|video|audio|presentation|ppt|slides|poster|infographic)$",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    return cleaned.strip() or message.strip()
+
+
+@router.post("/smart-action", response_model=SmartActionResponse)
+async def smart_action(request: SmartActionRequest):
+    """Unified smart endpoint — detects intent and calls the appropriate platform API.
+
+    This endpoint is used by the AI Assistant to route natural language requests
+    to the correct platform service (transform, image, video, audio, etc.)
+    and return structured results that the UI renders as rich cards.
+    """
+    if not request.messages:
+        raise HTTPException(status_code=400, detail="Messages cannot be empty")
+
+    last_user_message = ""
+    for msg in reversed(request.messages):
+        if msg.role == "user":
+            last_user_message = msg.content
+            break
+    if not last_user_message.strip():
+        raise HTTPException(status_code=400, detail="User message cannot be empty")
+
+    intent = detect_intent(last_user_message)
+    source = _extract_source_text(last_user_message)
+
+    # ── General chat — delegate to LLM ──────────────────────────────────
+    if intent not in ACTION_INTENTS:
+        chat_request = ChatRequest(
+            messages=request.messages,
+            context=request.context,
+            language=request.language,
+            tone=request.tone,
+            audience=request.audience,
+            objective=request.objective,
+            detail_level=request.detail_level,
+        )
+        chat_response = await chat(chat_request)
+        return SmartActionResponse(
+            action="chat",
+            intent=intent,
+            text=chat_response.reply,
+            model=chat_response.model,
+        )
+
+    # ── Image Generation ────────────────────────────────────────────────
+    if intent == "generate_image":
+        try:
+            from image.service import generate_and_save_image
+            filename, gen_time, device = generate_and_save_image(
+                prompt=source,
+                negative_prompt="",
+                width=512,
+                height=512,
+                steps=10,
+                mode="fast",
+            )
+            return SmartActionResponse(
+                action="image",
+                intent=intent,
+                text=f"Here's your generated image for: \"{source}\"",
+                data={
+                    "filename": filename,
+                    "image_url": f"/image/{filename}",
+                    "generation_time": gen_time,
+                    "device": device,
+                    "prompt": source,
+                },
+                download_url=f"/image/{filename}",
+                media_type="image",
+                model=f"Stable Diffusion ({device})",
+            )
+        except Exception as e:
+            traceback.print_exc()
+            return SmartActionResponse(
+                action="image",
+                intent=intent,
+                text=f"Image generation failed: {e}",
+                model="error",
+            )
+
+    # ── Video Plan ──────────────────────────────────────────────────────
+    if intent == "video_plan":
+        try:
+            from video.planner import IntelligentVideoPlanner
+
+            plan = IntelligentVideoPlanner.plan_video(
+                content=source if len(source) >= 10 else f"Create a video plan about {source}",
+                target_duration=30,
+                pacing="balanced",
+                language=request.language,
+                tone=request.tone,
+                audience=request.audience,
+            )
+            plan_data = plan.model_dump() if hasattr(plan, "model_dump") else plan
+            scenes = plan_data.get("scenes", []) if isinstance(plan_data, dict) else []
+            return SmartActionResponse(
+                action="video_plan",
+                intent=intent,
+                text=f"Video plan created: \"{plan_data.get('title', source)}\" with {len(scenes)} scenes.",
+                data=plan_data,
+                model="Qwen3 4B (Intelligent Video Planner)",
+            )
+        except Exception as e:
+            traceback.print_exc()
+            return SmartActionResponse(
+                action="video_plan",
+                intent=intent,
+                text=f"Video planning failed: {e}",
+                model="error",
+            )
+
+    # ── Video Generate (full pipeline) ──────────────────────────────────
+    if intent == "generate_video":
+        try:
+            import httpx as _httpx
+
+            async with _httpx.AsyncClient(timeout=600.0) as client:
+                resp = await client.post(
+                    "http://localhost:8000/video/generate-video",
+                    json={
+                        "text": source if len(source) >= 10 else f"Create a video about {source}",
+                        "target_duration": 30,
+                        "pacing": "balanced",
+                        "language": request.language,
+                        "tone": request.tone,
+                        "audience": request.audience,
+                    },
+                )
+                resp.raise_for_status()
+                result = resp.json()
+
+            video_file = result.get("video_file", "")
+            video_filename = video_file.split("/")[-1] if video_file else ""
+            return SmartActionResponse(
+                action="video",
+                intent=intent,
+                text=f"Video generated: {result.get('message', 'Video ready')}",
+                data=result,
+                download_url=f"/video/{video_filename}" if video_filename else None,
+                media_type="video",
+                model="SD1.5 + Edge TTS + FFmpeg",
+            )
+        except Exception as e:
+            traceback.print_exc()
+            return SmartActionResponse(
+                action="video",
+                intent=intent,
+                text=f"Video generation failed: {e}",
+                model="error",
+            )
+
+    # ── Audio Generation ────────────────────────────────────────────────
+    if intent == "generate_audio":
+        try:
+            from text.tts import generate_audio as _gen_audio
+            import uuid as _uuid
+            import os as _os
+
+            audio_dir = "generated_audio"
+            _os.makedirs(audio_dir, exist_ok=True)
+            filename = f"chat_{_uuid.uuid4().hex[:8]}.mp3"
+            output_file = f"{audio_dir}/{filename}"
+
+            await _gen_audio(
+                text=source,
+                output_file=output_file,
+                voice="en-US-AriaNeural",
+            )
+            return SmartActionResponse(
+                action="audio",
+                intent=intent,
+                text="Your audio narration is ready.",
+                data={"filename": filename, "voice": "en-US-AriaNeural"},
+                download_url=f"/audio/{filename}",
+                media_type="audio",
+                model="Edge TTS",
+            )
+        except Exception as e:
+            traceback.print_exc()
+            return SmartActionResponse(
+                action="audio",
+                intent=intent,
+                text=f"Audio generation failed: {e}",
+                model="error",
+            )
+
+    # ── Presentation / PPT ──────────────────────────────────────────────
+    if intent == "make_presentation":
+        # Generate slide content via LLM, frontend handles PPTX export
+        chat_request = ChatRequest(
+            messages=request.messages,
+            context=request.context,
+            language=request.language,
+            tone=request.tone,
+            audience=request.audience,
+            objective=request.objective,
+            detail_level=request.detail_level,
+        )
+        system_prompt = build_system_prompt(chat_request, "make_presentation")
+        messages = [{"role": m.role, "content": m.content} for m in request.messages]
+
+        try:
+            reply = await llm.generate(messages=messages, system_prompt=system_prompt)
+            reply = clean_llm_response(reply)
+
+            return SmartActionResponse(
+                action="presentation",
+                intent=intent,
+                text=reply,
+                data={"title": source, "content": reply},
+                media_type="document",
+                model=llm.model,
+            )
+        except Exception as e:
+            traceback.print_exc()
+            return SmartActionResponse(
+                action="presentation",
+                intent=intent,
+                text=f"Presentation creation failed: {e}",
+                model="error",
+            )
+
+    # ── Quality Score ───────────────────────────────────────────────────
+    if intent == "quality_score":
+        try:
+            from consistency.quality_scorer import ContentQualityScorer
+
+            report = ContentQualityScorer.evaluate_text(
+                text=source,
+                channel="text",
+                uckr=None,
+                target_audience=request.audience,
+                target_tone=request.tone,
+            )
+            score_result = report.model_dump()
+            return SmartActionResponse(
+                action="quality",
+                intent=intent,
+                text=f"Quality score: {score_result.get('overall_score', 'N/A')}/100",
+                data=score_result,
+                model="Quality Engine",
+            )
+        except Exception as e:
+            traceback.print_exc()
+            return SmartActionResponse(
+                action="quality",
+                intent=intent,
+                text="Quality scoring is currently unavailable. Please try the Quality & Validation panel.",
+                model="error",
+            )
+
+    # ── Consistency / Fact Check ────────────────────────────────────────
+    if intent == "consistency_check":
+        try:
+            from consistency.engine import ConsistencyEngine
+
+            uckr = ConsistencyEngine.extract(source)
+            facts_data = uckr.model_dump() if hasattr(uckr, 'model_dump') else uckr
+            facts_list = facts_data.get("facts", []) if isinstance(facts_data, dict) else []
+            return SmartActionResponse(
+                action="consistency",
+                intent=intent,
+                text=f"Extracted {len(facts_list)} UCKR facts from your content.",
+                data=facts_data,
+                model="UCKR Engine",
+            )
+        except Exception as e:
+            traceback.print_exc()
+            return SmartActionResponse(
+                action="consistency",
+                intent=intent,
+                text="Consistency check is currently unavailable.",
+                model="error",
+            )
+
+    # ── Content Transformation (summarize, linkedin, twitter, etc.) ────
+    if intent in ("transform", "summarization", "linkedin", "twitter",
+                   "infographic", "advisory", "strategy", "clean_content"):
+        # Map intent to output_type
+        output_map = {
+            "transform": "summary",
+            "summarization": "summary",
+            "linkedin": "linkedin",
+            "twitter": "twitter",
+            "infographic": "infographic",
+            "advisory": "advisory",
+            "strategy": "summary",
+            "clean_content": "summary",
+        }
+        output_type = output_map.get(intent, "summary")
+
+        # Use the LLM to generate the transformation
+        chat_request = ChatRequest(
+            messages=request.messages,
+            context=request.context,
+            language=request.language,
+            tone=request.tone,
+            audience=request.audience,
+            objective=request.objective,
+            detail_level=request.detail_level,
+        )
+        system_prompt = build_system_prompt(chat_request, intent)
+        messages = [{"role": m.role, "content": m.content} for m in request.messages]
+
+        try:
+            reply = await llm.generate(messages=messages, system_prompt=system_prompt)
+            reply = clean_llm_response(reply)
+
+            return SmartActionResponse(
+                action="transform",
+                intent=intent,
+                text=reply,
+                data={"output_type": output_type, "intent": intent},
+                model=llm.model,
+            )
+        except Exception as e:
+            traceback.print_exc()
+            return SmartActionResponse(
+                action="transform",
+                intent=intent,
+                text=f"Transformation failed: {e}",
+                model="error",
+            )
+
+    # ── Fallback ────────────────────────────────────────────────────────
+    chat_request = ChatRequest(
+        messages=request.messages,
+        context=request.context,
+        language=request.language,
+        tone=request.tone,
+        audience=request.audience,
+        objective=request.objective,
+        detail_level=request.detail_level,
+    )
+    chat_response = await chat(chat_request)
+    return SmartActionResponse(
+        action="chat",
+        intent=intent,
+        text=chat_response.reply,
+        model=chat_response.model,
+    )
