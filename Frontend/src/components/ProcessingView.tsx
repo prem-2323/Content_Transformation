@@ -23,20 +23,19 @@ export const ProcessingView: React.FC<ProcessingViewProps> = ({ onComplete, onCa
     { title: "Step 7: Multi-Dimensional Consistency Audit & Scoring", desc: "Evaluating fact, numeric, entity, and semantic consistency scores", icon: CheckCircle2 }
   ];
 
-  // Smooth 0 to 100% Progress Animation
+  // Smooth 0 to 100% Progress Animation over exactly 5 seconds
   useEffect(() => {
-    // 0 to 100% counter timer
+    // 0 to 100% counter timer (50ms per 1% = 5000ms = 5 seconds)
     const progressInterval = setInterval(() => {
       setProgressPercent((prev) => {
-        if (prev < 98) {
-          const increment = prev < 30 ? 3 : prev < 70 ? 2 : 1;
-          return prev + increment;
+        if (prev < 100) {
+          return prev + 1;
         }
-        return prev;
+        return 100;
       });
-    }, 120);
+    }, 48);
 
-    // Step index timer
+    // Step index timer (~700ms per step across 7 steps = 5 seconds)
     const stepInterval = setInterval(() => {
       setCurrentStepIndex((prev) => {
         if (prev < steps.length - 1) {
@@ -46,11 +45,11 @@ export const ProcessingView: React.FC<ProcessingViewProps> = ({ onComplete, onCa
           clearInterval(progressInterval);
           setProgressPercent(100);
           setIsFinished(true);
-          setTimeout(onComplete, 1000);
+          setTimeout(onComplete, 600);
           return prev;
         }
       });
-    }, 600);
+    }, 680);
 
     return () => {
       clearInterval(progressInterval);

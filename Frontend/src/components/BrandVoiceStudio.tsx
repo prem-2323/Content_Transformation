@@ -6,14 +6,14 @@ import { transformApi, BrandVoiceProfile } from '../api/transform';
 import { FAIcon } from './FAIcon';
 
 const DEFAULT_PROFILE: BrandVoiceProfile = {
-  brand_name: 'Acme Enterprise Solutions',
+  brand_name: '',
   brand_tone: 'Authoritative & Direct',
-  preferred_vocabulary: ['quantum-ready', 'mission-critical', 'zero-trust', 'enterprise-grade', 'lattice-proof'],
-  forbidden_phrases: ['game-changer', 'synergy', 'revolutionary', 'best-in-class', 'paradigm shift'],
-  hashtag_rules: '#AcmeSecurity #CyberResilience #PostQuantum #EnterpriseAI',
-  formatting_style: 'Clean markdown structure with bold takeaway headers, key metric bullet points, and bulleted takeaways.',
-  disclaimer: 'CONFIDENTIAL & PROPRIETARY: The information in this document is intended solely for authorized personnel. © 2026 Acme Enterprise Solutions Inc.',
-  logo_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=80',
+  preferred_vocabulary: [],
+  forbidden_phrases: [],
+  hashtag_rules: '',
+  formatting_style: '',
+  disclaimer: '',
+  logo_url: '',
   primary_color: '#1ed760',
   secondary_color: '#0f172a',
   accent_color: '#3b82f6'

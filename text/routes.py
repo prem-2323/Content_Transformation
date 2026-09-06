@@ -61,10 +61,47 @@ Return ONLY valid JSON matching this exact structure:
 """,
 
     "advisory": """
-Create a professional advisory.
+Transform the source content into a formal Advisory Memo. Do not copy the source
+verbatim and do not simply summarize it. Rewrite and reorganize the information
+using clear professional language while preserving every supported fact, name,
+number, date, cost, timeline, and requirement. Do not invent facts, statistics,
+recommendations, or unsupported information. Identify implications, risks,
+considerations, recommendations, and next steps only when they are mentioned or
+clearly supported by the source. Remove unnecessary repetition.
+
+Use this structure in the content:
+
+CONFIDENTIAL - ADVISORY MEMO
+
+Subject: [Relevant subject]
+
+1. EXECUTIVE SUMMARY
+Briefly explain the situation and its significance.
+
+2. KEY FINDINGS
+Extract the most important facts and findings.
+
+3. KEY RISKS & CONSIDERATIONS
+Identify risks, challenges, limitations, or concerns supported by the source.
+
+4. RECOMMENDATIONS
+Present actionable recommendations supported by the source.
+
+5. IMPLEMENTATION / TIMELINE
+Include dates, phases, deadlines, or timelines if present.
+
+6. COST / RESOURCE REQUIREMENTS
+Include costs or resources if present.
+
+7. NEXT STEPS
+List logical next actions supported by the source.
+
+8. CONCLUSION
+Give a concise professional conclusion.
+
 Return ONLY valid JSON matching this exact structure:
 {
-  "content": "Professional advisory text explaining situation, potential impact, and recommended actions."
+    "content": "Formal advisory memo using all requested sections."
 }
 """,
 
@@ -419,6 +456,53 @@ def _fallback_output(output_type: str, source_text: str):
         return f"{source_text}\n\n#ArtificialIntelligence #Healthcare"
     if output_type == "twitter":
         return validate_and_format_twitter(source_text)
+    if output_type == "advisory":
+        sentences = [
+            sentence.strip()
+            for sentence in re.split(r"(?<=[.!?])\s+", source_text)
+            if sentence.strip()
+        ]
+        risk_sentences = [
+            sentence for sentence in sentences
+            if re.search(r"challenge|risk|cybersecurity|data protection|digital literacy|personal information|limited", sentence, re.IGNORECASE)
+        ]
+        recommendation_sentences = [
+            sentence for sentence in sentences
+            if re.search(r"\bshould\b|pilot|evaluated|evaluation", sentence, re.IGNORECASE)
+        ]
+        timeline_sentences = [
+            sentence for sentence in sentences
+            if re.search(r"\b(month|months|year|years|deadline|phase|timeline)\b", sentence, re.IGNORECASE)
+        ]
+        cost_sentences = [
+            sentence for sentence in sentences
+            if re.search(r"\bcost\b|₹|crore|lakh|budget|resource", sentence, re.IGNORECASE)
+        ]
+        risks = "\n".join(f"- {sentence}" for sentence in risk_sentences) or "No specific risks or limitations are stated in the source."
+        recommendations = "\n".join(f"- {sentence}" for sentence in recommendation_sentences) or "No specific recommendations are stated in the source."
+        timeline = "\n".join(f"- {sentence}" for sentence in timeline_sentences) or "The source does not specify additional implementation phases or deadlines."
+        costs = "\n".join(f"- {sentence}" for sentence in cost_sentences) or "The source does not specify costs or resource requirements."
+        return (
+            "CONFIDENTIAL - ADVISORY MEMO\n\n"
+            "Subject: Source Advisory\n\n"
+            "1. EXECUTIVE SUMMARY\n"
+            f"The source describes the following situation: {source_text}\n\n"
+            "2. KEY FINDINGS\n"
+            + "\n".join(f"- {sentence}" for sentence in sentences)
+            + "\n\n"
+            "3. KEY RISKS & CONSIDERATIONS\n"
+            f"{risks}\n\n"
+            "4. RECOMMENDATIONS\n"
+            f"{recommendations}\n\n"
+            "5. IMPLEMENTATION / TIMELINE\n"
+            f"{timeline}\n\n"
+            "6. COST / RESOURCE REQUIREMENTS\n"
+            f"{costs}\n\n"
+            "7. NEXT STEPS\n"
+            f"{recommendations}\n\n"
+            "8. CONCLUSION\n"
+            "The memo reflects only the information provided in the source."
+        )
     if output_type == "email":
         return f"Subject: Announcement: Key Insights & Updates\n\nDear Team,\n\n{source_text}\n\nBest regards,\nLeadership Team"
     return source_text
@@ -513,6 +597,9 @@ OBJECTIVE:
 TRANSFORMATION INSTRUCTIONS:
 {output_instruction}
 
+The transformation instructions above are specific to the selected output type.
+Follow them as the controlling format and rewrite the source accordingly.
+
 CRITICAL OUTPUT CONSTRAINTS:
 - Return ONLY valid JSON matching the requested structure.
 - Do not include reasoning or chain of thought.
@@ -524,7 +611,21 @@ CRITICAL OUTPUT CONSTRAINTS:
 
         try:
             generated_text = generate_with_qwen(prompt)
-            return ot, parse_output_content(generated_text, ot, valid_text)
+            parsed_output = parse_output_content(generated_text, ot, valid_text)
+            if ot == "advisory":
+                advisory_text = parsed_output.get("content", "") if isinstance(parsed_output, dict) else str(parsed_output)
+                required_sections = (
+                    "1. EXECUTIVE SUMMARY",
+                    "2. KEY FINDINGS",
+                    "3. KEY RISKS & CONSIDERATIONS",
+                    "4. RECOMMENDATIONS",
+                    "8. CONCLUSION",
+                )
+                if advisory_text.strip() == valid_text.strip() or not all(
+                    section in advisory_text for section in required_sections
+                ):
+                    parsed_output = _fallback_output(ot, valid_text)
+            return ot, parsed_output
         except QwenServiceError as error:
             return ot, _fallback_output(ot, valid_text)
 

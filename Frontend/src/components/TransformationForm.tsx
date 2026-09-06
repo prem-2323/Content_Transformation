@@ -14,7 +14,7 @@ interface TransformationFormProps {
 export const TransformationForm: React.FC<TransformationFormProps> = ({ onRunTransform, isLoading, onCancel, initialConfig, initialSourceText }) => {
   const { isDarkMode } = useTheme();
   const [inputType, setInputType] = useState<'text' | 'file' | 'url'>('text');
-  const [sourceText, setSourceText] = useState(initialSourceText || `Our primary objective for the coming fiscal year focuses on aggressive market expansion into the APAC region, leveraging our localized AI solutions to address specific regulatory and customer requirements across Singapore, Tokyo, and Sydney.`);
+  const [sourceText, setSourceText] = useState(initialSourceText || '');
   const [file, setFile] = useState<File | null>(null);
   const [sourceUrl, setSourceUrl] = useState('');
 
@@ -26,14 +26,7 @@ export const TransformationForm: React.FC<TransformationFormProps> = ({ onRunTra
   const [objective, setObjective] = useState(initialConfig?.objective || 'Inform & Convert');
   
   const [selectedOutputs, setSelectedOutputs] = useState<string[]>(initialConfig?.output_types || [
-    'Executive Summary',
-    'LinkedIn Post',
-    'Twitter/X Post',
-    'Advisory',
-    'Infographic',
-    'Presentation',
-    'Video',
-    'Email Announcement'
+    'Executive Summary'
   ]);
   const [selectedMp3Addons, setSelectedMp3Addons] = useState<string[]>(initialConfig?.mp3_addons || [
     'Executive Voiceover (MP3)'
@@ -469,12 +462,29 @@ export const TransformationForm: React.FC<TransformationFormProps> = ({ onRunTra
         <div className={`rounded-2xl border shadow-lg p-6 transition-colors duration-300 ${
           isDarkMode ? 'glass-card border-white/10 shadow-[0_16px_32px_rgba(0,0,0,0.6)]' : 'bg-white border-slate-200 shadow-sm'
         }`}>
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-2">
             <div className="flex items-center space-x-2">
               <span className="w-7 h-7 rounded-full bg-[#1ed760]/20 text-[#1ed760] font-bold flex items-center justify-center text-xs border border-[#1ed760]/30">3</span>
               <h3 className={`text-base font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Select Deliverable Formats</h3>
             </div>
-            <span className="text-xs text-[#1ed760] font-bold uppercase tracking-wider">{selectedOutputs.length} formats selected</span>
+            <div className="flex items-center space-x-3">
+              <button
+                type="button"
+                onClick={() => setSelectedOutputs(outputFormatOptions.map(o => o.id))}
+                className="text-xs text-[#1ed760] hover:underline font-bold uppercase tracking-wider cursor-pointer"
+              >
+                Select All
+              </button>
+              <span className="text-[#4d4d4d] text-xs">•</span>
+              <button
+                type="button"
+                onClick={() => setSelectedOutputs([])}
+                className={`text-xs hover:underline font-bold uppercase tracking-wider cursor-pointer ${isDarkMode ? 'text-[#b3b3b3] hover:text-white' : 'text-slate-500 hover:text-slate-900'}`}
+              >
+                Clear All
+              </button>
+              <span className="text-xs text-[#1ed760] font-bold uppercase tracking-wider ml-2">{selectedOutputs.length} formats selected</span>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

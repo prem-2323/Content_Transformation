@@ -103,67 +103,32 @@ Return a valid JSON object with:
       }
     }
 
-    // Robust intelligent fallback engine
-    const words = sourceText.split(' ').slice(0, 50).join(' ');
-    const title = words.length > 0 ? words.substring(0, 30) + '...' : 'Generated Content Analysis';
-    
-    return {
-      status: "success",
-      source_id: "src_" + Math.random().toString(36).substring(7),
-      uckr: {
-        document: {
-          id: "doc_" + Math.floor(Math.random() * 9000 + 1000),
-          title: title,
-          domain: config.audience || "General Business",
-          author: "Operator",
-          created_date: new Date().toISOString().split('T')[0],
-          version: 1
-        },
-        core_topic: title,
-        summary: `Automated summary of source content tailored for ${config.audience || 'General public'} with a ${config.tone || 'Professional'} tone.`,
-        facts: [
-          { id: "F001", statement: "Primary thesis derived from source material: " + (sourceText.substring(0, 80) || "Core subject matter analyzed."), importance: 0.95, source_reference: "Paragraph 1", confidence: 0.98, category: "Core Findings", entities_mentioned: ["System", "Primary Subject"] },
-          { id: "F002", statement: "Key operational metric and performance benchmark confirmed across text.", importance: 0.88, source_reference: "Paragraph 2", confidence: 0.94, category: "Metrics", entities_mentioned: ["Benchmark", "ROI"] },
-          { id: "F003", statement: "Strategic alignment objective: " + (config.objective || "Inform") + " target stakeholders effectively.", importance: 0.91, source_reference: "Conclusion", confidence: 0.96, category: "Strategy", entities_mentioned: ["Stakeholders"] }
-        ],
-        entities: [
-          { id: "E001", name: "Primary Subject", type: "Concept", mentions: 5 },
-          { id: "E002", name: "Target Audience", type: "Group", mentions: 3 }
-        ]
-      },
-      outputs: {
-        "Executive Summary": `# Executive Summary\n\n## Overview\nThis transformation report synthesizes the provided source content for **${config.audience || 'General'}** stakeholders [F001].\n\n### Key Takeaways\n- **Core Finding**: Primary thesis validated and structured for maximum clarity [F001].\n- **Strategic Metric**: Optimized for **${config.tone || 'Professional'}** communication [F002].\n- **Objective Alignment**: Designed to **${config.objective || 'Inform'}** effectively [F003].`,
-        
-        "LinkedIn Post": `🚀 Transforming complex ideas into actionable insights!\n\nWe just analyzed key source materials for ${config.audience || 'Professionals'} with a focus on ${config.objective || 'innovation'}.\n\n💡 Key Highlights:\n- Strategic thesis validated [F001]\n- Performance benchmarks exceeded [F002]\n- Clear path forward established [F003]\n\n#AI #ContentTransformation #Innovation #${config.tone || 'Professional'}`,
-        
-        "Twitter/X Post": `1/3 🧵 Transforming content with AI-driven UCKR fact grounding [F001]. Here is what you need to know about our latest analysis! 👇\n\n2/3 Key metrics indicate exceptional alignment with target audience goals [F002]. Consistency score: 96%.\n\n3/3 Read the full executive summary and deliverables in our transformation dashboard! 🚀 #${config.tone || 'Tech'}`,
-        
-        "Advisory": `CONFIDENTIAL ADVISORY MEMORANDUM\n\nTO: ${config.audience || 'Leadership'}\nSUBJECT: Strategic Content Synthesis & Validation\n\n1. EXECUTIVE SUMMARY\nThe submitted material has been processed through the 7-step UCKR pipeline [F001]. All claims are verified against the central fact registry.\n\n2. ACTIONABLE RECOMMENDATIONS\n- Adopt recommended tone: ${config.tone || 'Professional'}.\n- Monitor performance benchmarks [F002].`,
-        
-        "Infographic": `📊 INFOGRAPHIC DATA POINTS\n\n• Metric 1: 98% Fact Grounding Index [F002]\n• Metric 2: 100% Entity Consistency [F001]\n• Metric 3: Zero Hallucination Rate [F003]`,
-        
-        "Presentation": `Slide 1: Title\nTransforming Source Material for ${config.audience || 'Audience'}\n\nSlide 2: Core Facts [F001]\n- Primary thesis established\n- High confidence extraction\n\nSlide 3: Strategic Metrics [F002]\n- Verified benchmarks\n- Actionable outcomes [F003]`,
-        
-        "Video": `VIDEO STORYBOARD & SCRIPT:\n\n[Scene 1 - 0:00-0:10] (Visual: Dynamic intro graphic)\nNarration: Welcome to our automated content transformation [F001].\n\n[Scene 2 - 0:10-0:30] (Visual: Key charts & metrics)\nNarration: Reviewing verified benchmarks for optimal performance [F002].`
-      },
-      validation_report: {
-        passed: true,
-        overall_score: 95,
-        breakdown: {
-          fact_consistency: 98,
-          numeric_consistency: 96,
-          entity_consistency: 94,
-          claim_consistency: 95,
-          semantic_consistency: 93,
-          cross_output_consistency: 94,
-          overall_score: 95
-        },
-        channel_scores: {
-          "Executive Summary": { channel: "Executive Summary", score: 98, status: "PASS", violations: [] },
-          "LinkedIn Post": { channel: "LinkedIn Post", score: 94, status: "PASS", violations: [] },
-          "Advisory": { channel: "Advisory", score: 96, status: "PASS", violations: [] }
-        }
+    // Proxy to local FastAPI backend (Ollama / Qwen3 4B engine)
+    try {
+      const response = await fetch("http://localhost:8000/transform", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: sourceText,
+          audience: config.audience,
+          tone: config.tone,
+          language: config.language,
+          detail_level: config.detail_level,
+          objective: config.objective,
+          output_types: config.output_types
+        })
+      });
+      if (response.ok) {
+        return await response.json();
       }
+    } catch (e: any) {
+      console.error("FastAPI proxy error:", e.message);
+    }
+
+    return {
+      status: "error",
+      message: "AI Backend unavailable. Make sure FastAPI is running on http://127.0.0.1:8000",
+      outputs: {}
     };
   }
 
