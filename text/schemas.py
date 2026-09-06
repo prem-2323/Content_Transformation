@@ -46,6 +46,7 @@ class TextRequest(BaseModel):
     language: str = "English"
     detail_level: str = "Medium"
     objective: str = "Inform"
+    duration: Optional[Union[int, str]] = 30
     brand_voice: Optional[BrandVoiceProfile] = None
 
     @model_validator(mode='after')
@@ -71,6 +72,7 @@ class TextResponse(BaseModel):
     outputs: Dict[str, Union[Dict[str, Any], str, Any]]
     generated_content: Optional[Union[Dict[str, Any], str, Any]] = None
     brand_voice: Optional[BrandVoiceProfile] = None
+    validation_report: Optional[Dict[str, Any]] = None
 
 
 class FileTextResponse(TextResponse):

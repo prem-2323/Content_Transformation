@@ -1,6 +1,7 @@
 import json
 import re
 import uuid
+import difflib
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Response
@@ -154,48 +155,149 @@ Return ONLY valid JSON with exactly this structure:
 }
 """,
 
-    "video_script": """
-Create a Complete Video Package and production storyboard.
-Return ONLY valid JSON with exactly these keys:
-{
-  "video_title": "Catchy and professional title for the video",
-  "duration": "Total estimated duration (e.g. 60 seconds)",
+    "video_script": """You are a professional video storyboard generator.
+
+SOURCE CONTENT:
+{source_content}
+
+UCKR FACTS:
+{uckr_facts}
+
+TRANSFORMATION TYPE:
+video_script
+
+TARGET AUDIENCE:
+{target_audience}
+
+REQUESTED DURATION:
+{requested_duration}
+
+IMPORTANT RULES:
+
+1. The SOURCE CONTENT is the ONLY source for factual information.
+
+2. The TARGET AUDIENCE must influence tone and complexity only.
+   NEVER use the audience description as video subject matter.
+
+3. "video_script" is a format instruction.
+   NEVER mention the phrase "we are creating a video script"
+   inside the narration.
+
+4. Do NOT describe the transformation request in the video.
+
+5. Do NOT introduce information from examples, templates,
+   previous requests, memory, or unrelated domains.
+
+6. Every factual statement must be supported by SOURCE CONTENT
+   or an explicitly provided UCKR fact.
+
+7. Extract important facts, numbers, dates, costs, timelines,
+   features, risks, benefits, and recommendations from the source.
+
+8. Each scene must communicate a DIFFERENT meaningful point.
+   Do not repeat the same narration across scenes.
+
+9. Visual descriptions must correspond to the actual source topic.
+
+10. On-screen text must be concise and must not contain "...".
+
+11. Match the requested duration exactly.
+
+12. If requested duration is 30 seconds, create approximately
+    5-6 meaningful scenes whose durations total exactly 30 seconds.
+
+13. Do not invent statistics, outcomes, people, organizations,
+    technologies, or claims.
+
+14. Before returning the result, verify every narration and
+    on-screen claim against the UCKR facts.
+
+Return ONLY valid JSON matching this schema:
+{{
+  "video_title": "Catchy professional title derived strictly from source content",
+  "duration": "{requested_duration}",
   "storyboard": [
-    {
+    {{
       "scene": 1,
-      "duration": "0-10 sec",
-      "visuals": "Detailed description of B-roll or visual elements",
-      "narration": "Voiceover script text for this scene",
-      "on_screen_text": "Key text or title callouts displayed on screen",
+      "duration": "0-5 sec",
+      "visuals": "Detailed description of B-roll or visual elements matching source topic",
+      "narration": "Voiceover script text for this scene derived strictly from source",
+      "on_screen_text": "Concise key text callout",
       "subtitle": "Subtitle text for accessibility",
-      "transition": "Transition effect to next scene (e.g. Cut, Fade to Black, Wipe Left)"
-    }
+      "transition": "Transition effect to next scene"
+    }}
   ],
   "music_recommendation": "Suggested background music genre, tempo, and mood",
-  "voice_over_direction": "Tone, pacing, emotion, and accent guidance for the voiceover artist",
-  "thumbnail_recommendation": "Description for an engaging video thumbnail concept"
-}
+  "voice_over_direction": "Tone, pacing, emotion, and accent guidance for voiceover",
+  "thumbnail_recommendation": "Description for engaging video thumbnail concept"
+}}
 """,
 
     "infographic": """
-Create structured content for an Infographic.
-Return ONLY valid JSON with exactly these keys:
+You are an Infographic Specification Generator.
+
+Your job is to transform ONLY the CURRENT SOURCE CONTENT into a structured infographic specification.
+
+STRICT GROUNDING RULES:
+1. Use ONLY information present in the current source content and explicitly provided UCKR facts.
+2. NEVER use information from previous requests, examples, templates, demonstrations, memory, or default content.
+3. NEVER introduce a different domain. For example, if the source is about government services, do not introduce healthcare, medicine, finance, education, sports, etc.
+4. Every claim in the output must be supported by the source or UCKR.
+5. Extract important numerical facts into key_statistics. Examples include: costs, percentages, dates, durations, quantities, counts, targets.
+6. If a field cannot be supported by the source, use an empty array or a neutral value rather than inventing information.
+7. icon_recommendations must be relevant to the actual source topic.
+8. Do not generate generic benefits unless they are explicitly stated or directly supported by the source.
+9. The output must describe the CURRENT SOURCE, not an example.
+10. Before returning the JSON, perform a factual consistency check. Remove every claim that cannot be traced to the source or UCKR.
+11. Never introduce information from examples, previous transformations, templates, memory, cached responses, or unrelated domains. Every factual statement, statistic, icon, and section must be derived from the current source or its UCKR facts.
+
+Return ONLY valid JSON matching this schema:
 {
-  "title": "Concise headline title for the infographic",
-  "main_message": "Core takeaway message",
-  "key_statistics": ["Stat or key metric 1", "Stat or key metric 2"],
-  "sections": [
-    {"heading": "Section 1 Title", "content": "Section 1 content or bullet points"},
-    {"heading": "Section 2 Title", "content": "Section 2 content or bullet points"}
+  "title": "Headline derived strictly from source",
+  "main_message": "Core takeaway message from source",
+  "key_statistics": [
+    {
+      "value": "12 months",
+      "label": "Estimated implementation period"
+    }
   ],
-  "supporting_text": "Brief contextual summary or supporting narrative",
+  "sections": [
+    {
+      "heading": "Section Heading",
+      "content": "Section Content derived from source"
+    }
+  ],
+  "supporting_text": "Contextual summary from source",
   "visual_hierarchy": "Guidance on primary vs secondary visual focus areas",
-  "icon_recommendations": ["icon_name_1", "icon_name_2"],
-  "color_recommendations": ["Primary Color", "Accent Color", "Background Color"],
-  "layout_recommendation": "Recommended visual structure layout (e.g. Vertical Timeline, 3-Column Grid, Comparison)"
+  "icon_recommendations": ["icon1", "icon2"],
+  "color_recommendations": ["Primary Color", "Accent Color"],
+  "layout_recommendation": "Recommended visual structure layout"
 }
 """
 }
+
+
+def _source_fact_catalog(source_text: str) -> str:
+    """Build a plain-text catalog of atomic facts extracted from the source text."""
+    if not source_text or not source_text.strip():
+        return "No source facts available."
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", source_text.strip()) if len(s.strip()) > 8]
+    if not sentences:
+        sentences = [source_text.strip()]
+    return "\n".join(f"- F{i+1:03d}: {s}" for i, s in enumerate(sentences[:12]))
+
+
+def _infographic_is_contaminated(data: dict | None, source_text: str) -> bool:
+    """Detect domain contamination or prompt leakage in infographic structure."""
+    if not isinstance(data, dict):
+        return False
+    clean_source = (source_text or "").lower()
+    source_has_healthcare = bool(re.search(r"health|medical|patient|clinical|diagnosis|hospital", clean_source))
+    
+    payload_str = json.dumps(data).lower()
+    if not source_has_healthcare and re.search(r"\b(healthcare|clinical|patient care|drug discovery|hospital)\b", payload_str):
+        return True
+    return False
 
 
 def _extract_meaningful_text(candidate: str) -> str:
@@ -244,66 +346,138 @@ def _extract_meaningful_text(candidate: str) -> str:
 
 
 def _build_infographic_fallback(text: str) -> dict:
-    """Create a minimal valid infographic payload when the model does not return JSON."""
+    """Create a factual, grounded infographic payload derived strictly from source text."""
     final_text = _extract_meaningful_text(text) or text.strip()
-    title = "AI for Better Outcomes"
-    main_message = final_text[:220] if final_text else "AI is improving healthcare, operations, and decision-making."
-    if len(final_text) > 220:
-        main_message = final_text[:220].rstrip() + "..."
 
-    sections = [
-        {"heading": "Key Benefit", "content": "Improves accuracy, speed, and decision support."},
-        {"heading": "Core Application", "content": "Supports diagnosis, treatment planning, and monitoring."},
-    ]
+    # Extract title from first sentence or line
+    first_line = final_text.split("\n")[0].strip() if final_text else ""
+    title = first_line[:60].rstrip() if len(first_line) > 5 else "Content Overview Infographic"
+    if title.endswith(".") or title.endswith(":"):
+        title = title[:-1].strip()
+
+    # Extract key numerical statistics from source text
+    key_statistics = []
+    stat_matches = re.findall(
+        r"(\b\d+(?:\.\d+)?(?:\s*%)|\b₹?\s*\d+\s*(?:crore|lakh|million|billion)|\b\d+\s*(?:months?|years?|days?|hours?))\b",
+        final_text,
+        re.IGNORECASE
+    )
+    for stat in stat_matches[:10]:
+        pos = final_text.find(stat)
+        context = "Key metric from source"
+        if pos != -1:
+            snippet = final_text[max(0, pos - 30):min(len(final_text), pos + 40)].strip()
+            context = re.sub(r"\s+", " ", snippet)
+        key_statistics.append({"value": stat.strip(), "label": context[:50]})
+
+    # Extract dynamic sections from sentences
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", final_text) if len(s.strip()) > 10]
+    sections = []
+    if sentences:
+        sections.append({"heading": "Core Platform Purpose", "content": sentences[0]})
+    if len(sentences) > 1:
+        sections.append({"heading": "Platform Capabilities", "content": " ".join(sentences[1:3])})
+    if len(sentences) > 3:
+        sections.append({"heading": "Key Outcomes & Strategy", "content": " ".join(sentences[3:5])})
+
+    if not sections:
+        sections = [{"heading": "Overview", "content": final_text[:200]}]
+
+    # Domain-aware icon selection
+    text_lower = final_text.lower()
+    icons = []
+    if any(w in text_lower for w in ["government", "tamil nadu", "public", "state", "citizen"]):
+        icons.append("government")
+    if any(w in text_lower for w in ["document", "application", "request", "file"]):
+        icons.append("document")
+    if any(w in text_lower for w in ["notification", "message", "alert"]):
+        icons.append("notification")
+    if any(w in text_lower for w in ["ai", "assistant", "digital", "platform", "robot"]):
+        icons.append("robot")
+    if not icons:
+        icons = ["chart", "document", "shield"]
 
     return validate_and_format_infographic({
         "title": title,
-        "main_message": main_message,
-        "key_statistics": [],
+        "main_message": sentences[0] if sentences else final_text[:200],
+        "key_statistics": key_statistics,
         "sections": sections,
-        "supporting_text": final_text[:500] if final_text else "AI is helping organizations work faster and more accurately.",
-        "visual_hierarchy": "Lead with a dramatic headline, then highlight the three strongest benefits in large cards.",
-        "icon_recommendations": ["medical-cross", "chart", "brain"],
-        "color_recommendations": ["Navy", "Blue", "Light blue"],
-        "layout_recommendation": "Hero headline above three benefit cards with a single supporting statistic row."
-    })
+        "supporting_text": final_text[:400],
+        "visual_hierarchy": "Lead with the platform purpose, followed by key metrics, capabilities, and operational roadmap.",
+        "icon_recommendations": icons,
+        "color_recommendations": ["Navy", "Blue", "White"],
+        "layout_recommendation": "Hero section followed by metric cards, capability icons, challenge cards, and timeline."
+    }, source_text=final_text)
 
 
-def _build_video_fallback(text: str) -> dict:
-    """Create a minimal valid video package payload when the model does not return JSON."""
-    final_text = _extract_meaningful_text(text) or text.strip()
-    title = "AI Impact Overview"
-    if len(final_text) > 40:
-        title = final_text[:40].rstrip() + ("..." if len(final_text) > 40 else "")
-    if not title or title == "...":
-        title = "AI Impact Overview"
-
-    scene_topics = [
-        "Introduce the topic with a clear establishing shot.",
-        "Show the core technology or process in action.",
-        "Explain the first major benefit with supporting graphics.",
-        "Explain the second major benefit with a practical example.",
-        "Show the broader impact and why it matters to the audience.",
-        "Close with the key takeaway and a forward-looking message.",
+def _source_fact_catalog(source_text: str) -> str:
+    """Create a compact, explicit fact list for format-specific prompts."""
+    sentences = [
+        sentence.strip()
+        for sentence in re.split(r"(?<=[.!?])\s+", source_text)
+        if len(sentence.strip()) > 12
     ]
-    storyboard = [{
-        "scene": index,
-        "duration": f"{(index - 1) * 10}-{index * 10} sec",
-        "visuals": topic,
-        "narration": final_text,
-        "on_screen_text": title,
-        "subtitle": final_text,
-        "transition": "Fade to next scene" if index < 6 else "Fade out",
-    } for index, topic in enumerate(scene_topics, 1)]
+    return "\n".join(f"F{index:03d}: {sentence}" for index, sentence in enumerate(sentences, 1))
+
+
+def _infographic_is_contaminated(value: object, source_text: str) -> bool:
+    """Reject known cross-domain/template leakage from infographic model output."""
+    serialized = json.dumps(value, ensure_ascii=False).lower()
+    source_lower = source_text.lower()
+    contaminated_terms = (
+        "diagnosis", "treatment planning", "medical-cross", "healthcare", "medical",
+        "ai for better outcomes", "monitoring patients"
+    )
+    if any(term in serialized and term not in source_lower for term in contaminated_terms):
+        return True
+    has_source_metrics = bool(re.search(r"\b\d+\s*months?\b|₹\s*\d+|\b\d+\s*crore\b", source_text, re.IGNORECASE))
+    return has_source_metrics and isinstance(value, dict) and not value.get("key_statistics")
+
+
+def _build_video_fallback(text: str, target_duration: int = 30) -> dict:
+    """Create a minimal valid video package payload derived strictly from source text."""
+    final_text = _extract_meaningful_text(text) or text.strip()
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", final_text) if len(s.strip()) > 5]
+    if not sentences:
+        sentences = [final_text or "Source content overview."]
+
+    first_line = sentences[0]
+    title = first_line[:50].rstrip() if len(first_line) > 5 else "Video Overview"
+    if title.endswith(".") or title.endswith(":"):
+        title = title[:-1].strip()
+
+    num_scenes = 6 if target_duration in (30, 60) else max(4, min(8, round(target_duration / 5)))
+    step = target_duration / num_scenes
+
+    storyboard = []
+    for i in range(num_scenes):
+        start_sec = int(round(i * step))
+        end_sec = int(round((i + 1) * step))
+        if i == num_scenes - 1:
+            end_sec = target_duration
+        
+        narration_text = sentences[i % len(sentences)]
+        words = narration_text.split()
+        on_screen = " ".join(words[:5]).rstrip(".,;:-...")
+        
+        storyboard.append({
+            "scene": i + 1,
+            "duration": f"{start_sec}-{end_sec} sec",
+            "visuals": f"Visual representation of {on_screen.lower()}",
+            "narration": narration_text,
+            "on_screen_text": on_screen,
+            "subtitle": narration_text,
+            "transition": "Fade to next scene" if i < num_scenes - 1 else "Fade out"
+        })
 
     return validate_and_format_video_script({
         "video_title": title,
-        "duration": "60 seconds",
+        "duration": f"{target_duration} seconds",
         "storyboard": storyboard,
-        "music_recommendation": "Modern upbeat ambient electronic track with soft drums",
-        "voice_over_direction": "Clear, confident, professional and energetic delivery",
-        "thumbnail_recommendation": "Large title text over a futuristic dashboard and abstract AI network graphics"
-    })
+        "music_recommendation": "Modern upbeat ambient electronic track",
+        "voice_over_direction": "Clear, confident, professional executive delivery",
+        "thumbnail_recommendation": f"Engaging graphic illustrating {title}"
+    }, target_duration=target_duration, source_text=final_text)
 
 
 def _build_presentation_fallback(text: str) -> dict:
@@ -378,14 +552,13 @@ def _is_placeholder_dict(data: dict) -> bool:
     return bool(leaves) and all(_is_placeholder_output(leaf) for leaf in leaves)
 
 
-def parse_output_content(generated_text: str, output_type: str, source_text: str = ""):
+def parse_output_content(generated_text: str, output_type: str, source_text: str = "", target_duration: int = 30):
     """Clean reasoning leakage, validate model response, and parse structured output if required."""
     cleaned_text = validate_and_clean_model_response(generated_text)
     ot_lower = output_type.lower()
 
     # Parse JSON payload
     parsed_json = extract_json_payload(generated_text)
-
     # 1. Text Deliverables (linkedin, twitter, summary, advisory, email)
     if ot_lower in ["linkedin", "twitter", "summary", "advisory", "email"]:
         final_text = cleaned_text
@@ -407,11 +580,11 @@ def parse_output_content(generated_text: str, output_type: str, source_text: str
         if _is_placeholder_output(final_text) or (
             source_text and len(final_text) < 15 < len(source_text)
         ):
-            return _fallback_output(ot_lower, source_text)
+            return _fallback_output(ot_lower, source_text, target_duration=target_duration)
 
         final_text = _extract_meaningful_text(final_text) or cleaned_text
         if _is_placeholder_output(final_text):
-            return _fallback_output(ot_lower, source_text)
+            return _fallback_output(ot_lower, source_text, target_duration=target_duration)
         if ot_lower == "twitter":
             return validate_and_format_twitter(final_text)
         return final_text
@@ -422,7 +595,7 @@ def parse_output_content(generated_text: str, output_type: str, source_text: str
             if ot_lower == "infographic":
                 return _build_infographic_fallback(source_text or generated_text)
             if ot_lower == "video_script":
-                return _build_video_fallback(source_text or generated_text)
+                return _build_video_fallback(source_text or generated_text, target_duration=target_duration)
             if ot_lower == "presentation":
                 return _build_presentation_fallback(source_text or cleaned_text)
         if ot_lower == "infographic":
@@ -430,7 +603,7 @@ def parse_output_content(generated_text: str, output_type: str, source_text: str
                 return _build_infographic_fallback(source_text)
             return validate_and_format_infographic(parsed_json)
         elif ot_lower == "video_script":
-            return validate_and_format_video_script(parsed_json)
+            return validate_and_format_video_script(parsed_json, target_duration=target_duration, source_text=source_text)
         elif ot_lower == "presentation":
             return validate_and_format_presentation(parsed_json)
 
@@ -438,18 +611,18 @@ def parse_output_content(generated_text: str, output_type: str, source_text: str
     if ot_lower == "infographic":
         return _build_infographic_fallback(source_text or generated_text)
     elif ot_lower == "video_script":
-        return _build_video_fallback(generated_text)
+        return _build_video_fallback(source_text or generated_text, target_duration=target_duration)
     elif ot_lower == "presentation":
         return _build_presentation_fallback(source_text or cleaned_text)
 
     return cleaned_text
 
 
-def _fallback_output(output_type: str, source_text: str):
+def _fallback_output(output_type: str, source_text: str, target_duration: int = 30):
     if output_type == "infographic":
         return _build_infographic_fallback(source_text)
     if output_type == "video_script":
-        return _build_video_fallback(source_text)
+        return _build_video_fallback(source_text, target_duration=target_duration)
     if output_type == "presentation":
         return _build_presentation_fallback(source_text)
     if output_type == "linkedin":
@@ -553,6 +726,77 @@ def resolve_form_output_types(output_type: str | None = None, output_types: str 
     return ["summary"]
 
 
+def _claim_validation_report(source_text: str, outputs: dict) -> dict:
+    """Score output claims against the current source and flag unsupported claims."""
+    source_sentences = [
+        sentence.strip().lower()
+        for sentence in re.split(r"(?<=[.!?])\s+", source_text)
+        if len(sentence.strip()) > 12
+    ]
+    claims = []
+    violations = []
+
+    def flatten_text(value: object) -> str:
+        if isinstance(value, dict):
+            factual_keys = (
+                "title", "main_message", "key_statistics", "sections",
+                "supporting_text", "content", "executive_summary",
+                "situation_analysis", "recommended_actions"
+            )
+            return " ".join(flatten_text(value.get(key)) for key in factual_keys if key in value)
+        if isinstance(value, list):
+            return " ".join(flatten_text(item) for item in value)
+        return str(value) if value is not None else ""
+
+    for channel, value in outputs.items():
+        content = flatten_text(value)
+        for claim in re.split(r"(?<=[.!?])\s+", content):
+            claim = claim.strip()
+            normalized = re.sub(r"^[#\-\d.\s]+", "", claim).strip()
+            if len(normalized.split()) < 5 or normalized.upper().startswith(("CONFIDENTIAL", "SUBJECT:")):
+                continue
+            claim_lower = normalized.lower()
+            best_match = max(
+                (difflib.SequenceMatcher(None, claim_lower, source).ratio() for source in source_sentences),
+                default=0.0,
+            )
+            supported = best_match >= 0.42 or any(
+                token in claim_lower
+                for token in ("source", "provided", "no specific", "not specified")
+            )
+            claims.append(supported)
+            if not supported:
+                violations.append({
+                    "channel": channel,
+                    "type": "unsupported_claim",
+                    "claim": normalized,
+                    "uckr_match": "NONE",
+                    "action": "REVIEW REQUIRED",
+                    "message": f"Unsupported claim in {channel}: {normalized}",
+                })
+
+    total_claims = len(claims)
+    supported_claims = sum(claims)
+    score = round((supported_claims / total_claims) * 100, 1) if total_claims else 0.0
+    return {
+        "passed": score >= 80.0 and not violations,
+        "overall_score": score,
+        "breakdown": {
+            "fact_consistency": score,
+            "claim_consistency": score,
+            "numeric_consistency": score,
+            "entity_consistency": score,
+            "semantic_consistency": score,
+            "cross_output_consistency": score,
+        },
+        "claim_summary": {
+            "supported_claims": supported_claims,
+            "total_factual_claims": total_claims,
+        },
+        "violations": violations,
+    }
+
+
 @router.post("/transform", response_model=TextResponse)
 def transform(request: TextRequest):
     """Transform direct text input (or a scraped public URL) into selected output formats using Qwen3 4B."""
@@ -562,19 +806,44 @@ def transform(request: TextRequest):
     valid_text = validate_source_text(source_text)
     raw_requested = request.output_types or [request.output_type or "summary"]
     target_types = validate_output_types(raw_requested)
-    def generate_output(ot: str):
-        output_instruction = OUTPUT_INSTRUCTIONS.get(
-            ot.lower(),
-            OUTPUT_INSTRUCTIONS["summary"]
-        )
+    target_dur = 30
+    if hasattr(request, "duration") and request.duration:
+        try:
+            if isinstance(request.duration, int):
+                target_dur = request.duration
+            else:
+                target_dur = int(re.sub(r"\D", "", str(request.duration))) or 30
+        except Exception:
+            target_dur = 30
 
-        prompt = f"""
+    def generate_output(ot: str):
+        ot_lower = ot.lower()
+        if ot_lower == "video_script":
+            duration_str = f"{target_dur} seconds"
+            sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", valid_text) if len(s.strip()) > 10]
+            uckr_facts_list = "\n".join([f"- Fact {i+1}: {s}" for i, s in enumerate(sentences[:10])]) or f"- Fact 1: {valid_text[:200]}"
+            prompt = OUTPUT_INSTRUCTIONS["video_script"].format(
+                source_content=valid_text,
+                uckr_facts=uckr_facts_list,
+                target_audience=request.audience or "General public",
+                requested_duration=duration_str
+            )
+        else:
+            output_instruction = OUTPUT_INSTRUCTIONS.get(
+                ot_lower,
+                OUTPUT_INSTRUCTIONS["summary"]
+            )
+
+            prompt = f"""
 You are a professional content transformation AI.
 
 Transform the source content according to the user's requirements.
 
 SOURCE CONTENT:
 {valid_text}
+
+CURRENT SOURCE UCKR FACTS:
+{_source_fact_catalog(valid_text)}
 
 OUTPUT TYPE:
 {ot}
@@ -611,7 +880,9 @@ CRITICAL OUTPUT CONSTRAINTS:
 
         try:
             generated_text = generate_with_qwen(prompt)
-            parsed_output = parse_output_content(generated_text, ot, valid_text)
+            parsed_output = parse_output_content(generated_text, ot, valid_text, target_duration=target_dur)
+            if ot == "infographic" and _infographic_is_contaminated(parsed_output, valid_text):
+                parsed_output = _build_infographic_fallback(valid_text)
             if ot == "advisory":
                 advisory_text = parsed_output.get("content", "") if isinstance(parsed_output, dict) else str(parsed_output)
                 required_sections = (
@@ -624,10 +895,10 @@ CRITICAL OUTPUT CONSTRAINTS:
                 if advisory_text.strip() == valid_text.strip() or not all(
                     section in advisory_text for section in required_sections
                 ):
-                    parsed_output = _fallback_output(ot, valid_text)
+                    parsed_output = _fallback_output(ot, valid_text, target_duration=target_dur)
             return ot, parsed_output
         except QwenServiceError as error:
-            return ot, _fallback_output(ot, valid_text)
+            return ot, _fallback_output(ot, valid_text, target_duration=target_dur)
 
     with ThreadPoolExecutor(max_workers=len(target_types)) as executor:
         outputs_dict = dict(executor.map(generate_output, target_types))
@@ -643,7 +914,8 @@ CRITICAL OUTPUT CONSTRAINTS:
         detail_level=request.detail_level,
         objective=request.objective,
         outputs=outputs_dict,
-        generated_content=outputs_dict[first_type]
+        generated_content=outputs_dict[first_type],
+        validation_report=_claim_validation_report(valid_text, outputs_dict),
     )
 
 
@@ -656,7 +928,8 @@ async def transform_file(
     tone: str = Form("Professional"),
     language: str = Form("English"),
     detail_level: str = Form("Medium"),
-    objective: str = Form("Inform")
+    objective: str = Form("Inform"),
+    duration: int = Form(30)
 ):
     """Extract document content (TXT, PDF, DOCX) and transform into selected output format(s)."""
     if not file.filename:
@@ -690,12 +963,24 @@ async def transform_file(
         outputs_dict = {}
 
         for ot in target_types:
-            output_instruction = OUTPUT_INSTRUCTIONS.get(
-                ot.lower(),
-                OUTPUT_INSTRUCTIONS["summary"]
-            )
+            ot_lower = ot.lower()
+            if ot_lower == "video_script":
+                duration_str = f"{duration} seconds"
+                sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", valid_text) if len(s.strip()) > 10]
+                uckr_facts_list = "\n".join([f"- Fact {i+1}: {s}" for i, s in enumerate(sentences[:10])]) or f"- Fact 1: {valid_text[:200]}"
+                prompt = OUTPUT_INSTRUCTIONS["video_script"].format(
+                    source_content=valid_text,
+                    uckr_facts=uckr_facts_list,
+                    target_audience=audience,
+                    requested_duration=duration_str
+                )
+            else:
+                output_instruction = OUTPUT_INSTRUCTIONS.get(
+                    ot_lower,
+                    OUTPUT_INSTRUCTIONS["summary"]
+                )
 
-            prompt = f"""
+                prompt = f"""
 You are a professional content transformation AI.
 
 Transform the extracted document content according to the user's requirements.
@@ -734,9 +1019,9 @@ Important:
 
             try:
                 generated_text = generate_with_qwen(prompt)
-                outputs_dict[ot] = parse_output_content(generated_text, ot, valid_text)
+                outputs_dict[ot] = parse_output_content(generated_text, ot, valid_text, target_duration=duration)
             except QwenServiceError:
-                outputs_dict[ot] = _fallback_output(ot, valid_text)
+                outputs_dict[ot] = _fallback_output(ot, valid_text, target_duration=duration)
 
         first_type = target_types[0]
 

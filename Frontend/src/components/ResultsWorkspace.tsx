@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { FileText, Copy, Download, Edit3, Check, Eye, ShieldCheck, DownloadCloud, Maximize2, X, Volume2, VolumeX, Square, Layers, BarChart3, Mail, Presentation, Video, Loader2 } from 'lucide-react';
+import { FileText, Copy, Download, Edit3, Check, Eye, ShieldCheck, DownloadCloud, Maximize2, X, Volume2, VolumeX, Square, Layers, BarChart3, Mail, Presentation, Video, Loader2, RotateCcw } from 'lucide-react';
 import { motion } from 'motion/react';
 import { ContentIntelligence } from './ContentIntelligence';
 import { useTheme } from '../context/ThemeContext';
@@ -11,6 +11,7 @@ import { audioApi } from '../api/audio';
 interface ResultsWorkspaceProps {
   transformationResult: any;
   onNavigateToIntelligence: () => void;
+  onStartNewTransformation?: () => void;
 }
 
 const toDisplayText = (value: unknown): string => {
@@ -19,7 +20,7 @@ const toDisplayText = (value: unknown): string => {
   return JSON.stringify(value, null, 2);
 };
 
-export const ResultsWorkspace: React.FC<ResultsWorkspaceProps> = ({ transformationResult, onNavigateToIntelligence }) => {
+export const ResultsWorkspace: React.FC<ResultsWorkspaceProps> = ({ transformationResult, onNavigateToIntelligence, onStartNewTransformation }) => {
   const { isDarkMode } = useTheme();
   const rawOutputs = transformationResult?.outputs || {};
   const outputs = useMemo(
@@ -275,9 +276,10 @@ export const ResultsWorkspace: React.FC<ResultsWorkspaceProps> = ({ transformati
   };
 
   const validationReport = transformationResult?.validation_report || {
-    passed: true,
-    overall_score: 95,
-    breakdown: { fact_consistency: 98, numeric_consistency: 96, entity_consistency: 94 }
+    passed: false,
+    overall_score: 0,
+    breakdown: { fact_consistency: 0, numeric_consistency: 0, entity_consistency: 0 },
+    violations: [{ type: 'validation_unavailable', message: 'Validation report unavailable. Review required.' }]
   };
 
   return (
@@ -296,10 +298,20 @@ export const ResultsWorkspace: React.FC<ResultsWorkspaceProps> = ({ transformati
         </div>
 
         <div className="mt-4 md:mt-0 flex items-center space-x-3">
+          {onStartNewTransformation && (
+            <button
+              onClick={onStartNewTransformation}
+              className="px-5 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center space-x-2 bg-[#1ed760] hover:bg-[#1db954] text-black shadow-md transition cursor-pointer"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span>New Transformation</span>
+            </button>
+          )}
+
           <button
             onClick={handleDownloadAll}
             className={`px-5 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center space-x-2 border transition shadow-md hover:scale-[1.02] ${
-              isDarkMode ? 'bg-[#181818] hover:bg-[#282828] text-white border-[#4d4d4d]' : 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300 shadow-sm'
+              isDarkMode ? 'bg-[#181818] hover:bg-[#282828] text-[#b3b3b3] hover:text-white border-[#4d4d4d]' : 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300 shadow-sm'
             }`}
           >
             <DownloadCloud className="w-4 h-4 text-[#1ed760]" />
@@ -638,12 +650,24 @@ export const ResultsWorkspace: React.FC<ResultsWorkspaceProps> = ({ transformati
             <div className={`px-6 py-4 border-t rounded-b-2xl flex items-center justify-between text-xs ${
               isDarkMode ? 'bg-[#121212]/80 border-[#282828] text-[#b3b3b3]' : 'bg-slate-100 border-slate-200 text-slate-600'
             }`}>
-              <span>Atomic Fact Attribution: Active [F001, F002, F003]</span>
-              <span className="text-[#1ed760] font-bold flex items-center space-x-1.5">
-                <Check className="w-4 h-4 bg-[#1ed760]/20 rounded-full p-0.5 text-[#1ed760]" />
-                <span>100% Factually Consistent</span>
+              <span>
+                Atomic Fact Attribution:{' '}
+                {validationReport.claim_summary
+                  ? `${validationReport.claim_summary.supported_claims} facts linked / ${validationReport.claim_summary.total_factual_claims} claims evaluated`
+                  : 'Unavailable'}
+              </span>
+              <span className={`font-bold flex items-center space-x-1.5 ${validationReport.passed ? 'text-[#1ed760]' : 'text-amber-500'}`}>
+                <Check className="w-4 h-4 rounded-full p-0.5" />
+                <span>{validationReport.overall_score}% {validationReport.passed ? 'Factually Consistent' : 'Review Required'}</span>
               </span>
             </div>
+            {!validationReport.passed && validationReport.violations?.length > 0 && (
+              <div className="px-6 py-3 border-t border-amber-500/30 bg-amber-500/10 text-xs text-amber-600 dark:text-amber-300">
+                <strong>Unsupported claims detected:</strong>{' '}
+                {validationReport.violations.slice(0, 2).map((violation: any) => violation.claim || violation.message).join(' ')}{' '}
+                <span className="font-bold">UCKR Match: NONE. REVIEW REQUIRED.</span>
+              </div>
+            )}
           </motion.div>
         </div>
       )}

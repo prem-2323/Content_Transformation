@@ -43,7 +43,7 @@ def test_qwen_supports_every_canonical_output_type(monkeypatch):
     def fake_qwen(prompt):
         output_type = next(
             output for output in output_types
-            if f"OUTPUT TYPE:\n{output}" in prompt
+            if f"OUTPUT TYPE:\n{output}" in prompt or f"TRANSFORMATION TYPE:\n{output}" in prompt
         )
         if output_type in {"summary", "linkedin", "twitter", "advisory"}:
             return json.dumps({"content": f"Generated {output_type} content."})
@@ -151,3 +151,39 @@ def test_video_validator_divides_repeated_healthcare_narration_into_meaningful_s
     assert "monitoring" in scene_narrations[2].lower()
     assert "drug discovery" in scene_narrations[3].lower()
     assert "personalized" in scene_narrations[4].lower()
+
+
+def test_video_script_thirty_second_duration_constraint():
+    result = validate_and_format_video_script({
+        "video_title": "Tamil Nadu AI Service Platform",
+        "duration": "30 seconds",
+        "storyboard": [{"visuals": "Digital portal interface"}],
+    }, target_duration=30, source_text="Tamil Nadu is deploying an AI digital service platform to streamline citizen requests.")
+
+    assert result["duration"] == "30 seconds"
+    assert len(result["storyboard"]) == 6
+    assert [scene["duration"] for scene in result["storyboard"]] == [
+        "0-5 sec", "5-10 sec", "10-15 sec", "15-20 sec", "20-25 sec", "25-30 sec"
+    ]
+
+
+def test_video_script_strips_meta_phrases_and_ellipses():
+    result = validate_and_format_video_script({
+        "video_title": "Tamil Nadu Platform",
+        "duration": "30 seconds",
+        "storyboard": [{
+            "scene": 1,
+            "duration": "0-5 sec",
+            "visuals": "Digital portal for C-Suite & Enterprise Executives",
+            "narration": "We are creating a video script for Tamil Nadu AI platform.",
+            "on_screen_text": "Tamil Nadu Platform...",
+            "subtitle": "We are creating a video script for Tamil Nadu AI platform.",
+            "transition": "Fade to next scene",
+        }],
+    }, target_duration=30, source_text="Tamil Nadu is deploying an AI digital service platform to streamline citizen requests.")
+
+    narration = result["storyboard"][0]["narration"]
+    on_screen = result["storyboard"][0]["on_screen_text"]
+    assert "we are creating a video script" not in narration.lower()
+    assert "..." not in on_screen
+    assert "c-suite" not in result["storyboard"][0]["visuals"].lower()

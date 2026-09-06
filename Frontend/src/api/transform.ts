@@ -33,6 +33,7 @@ export interface TransformRequest {
   language?: string;
   detail_level?: string;
   objective?: string;
+  duration?: number | string;
   output_types?: string[];
   brand_voice?: BrandVoiceProfile;
 }

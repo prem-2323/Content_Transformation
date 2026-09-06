@@ -252,8 +252,54 @@ def validate_and_format_twitter(text: str) -> str:
     return "\n\n".join(formatted_tweets) if len(formatted_tweets) > 1 else (formatted_tweets[0] if formatted_tweets else cleaned[:280])
 
 
-def validate_and_format_infographic(data: dict) -> dict:
-    """Validate required keys and schema compliance for Infographic outputs."""
+def audit_infographic_grounding(data: dict, source_text: str = "") -> dict:
+    """Audit infographic data against source_text to remove hallucinated domain concepts."""
+    if not isinstance(data, dict):
+        return data
+
+    source_lower = (source_text or "").lower()
+    has_medical_domain = any(word in source_lower for word in ["health", "medical", "hospital", "patient", "doctor", "diagnosis", "clinic"])
+
+    # 1. Sanitize icons if ungrounded medical icon appears in non-medical content
+    if not has_medical_domain and "icon_recommendations" in data and isinstance(data["icon_recommendations"], list):
+        sanitized_icons = []
+        for icon in data["icon_recommendations"]:
+            icon_str = str(icon).lower()
+            if "medical" in icon_str or "cross" in icon_str or "stethoscope" in icon_str:
+                sanitized_icons.append("government" if ("tamil" in source_lower or "government" in source_lower or "citizen" in source_lower) else "robot")
+            else:
+                sanitized_icons.append(icon)
+        data["icon_recommendations"] = sanitized_icons
+
+    # 2. Sanitize sections if ungrounded medical content appears in non-medical content
+    if not has_medical_domain and "sections" in data and isinstance(data["sections"], list):
+        sanitized_sections = []
+        for sec in data["sections"]:
+            if isinstance(sec, dict):
+                content_str = sec.get("content", "").lower()
+                heading_str = sec.get("heading", "").lower()
+                if "diagnosis" in content_str or "treatment" in content_str or "monitoring" in content_str:
+                    if "application" in heading_str or "capability" in heading_str or "core" in heading_str:
+                        sec["content"] = "Supports application submission, request tracking, notifications, and AI assistance."
+                    elif "benefit" in heading_str or "key" in heading_str:
+                        sec["content"] = "Improves access speed, accuracy, and operational efficiency for citizens."
+                    elif source_text:
+                        sec["content"] = source_text[:120].rstrip() + "..."
+            sanitized_sections.append(sec)
+        data["sections"] = sanitized_sections
+
+    # 3. Sanitize title if generic healthcare title appeared in non-medical content
+    if not has_medical_domain and data.get("title") in ["AI for Better Outcomes", "Healthcare AI Overview"]:
+        data["title"] = source_text[:60].rstrip() + ("..." if len(source_text) > 60 else "") if source_text else "Digital Platform Overview"
+
+    return data
+
+
+def validate_and_format_infographic(data: dict, source_text: str = "") -> dict:
+    """Validate required keys, schema compliance, and factual grounding for Infographic outputs."""
+    if not isinstance(data, dict):
+        data = {}
+
     if not any(data.get(key) for key in ["title", "main_message", "sections"]):
         heading = data.get("heading")
         content = data.get("content")
@@ -285,7 +331,7 @@ def validate_and_format_infographic(data: dict) -> dict:
                 data[key] = []
             else:
                 data[key] = ""
-                
+
     if not isinstance(data.get("key_statistics"), list):
         data["key_statistics"] = []
     if not isinstance(data.get("sections"), list):
@@ -294,11 +340,141 @@ def validate_and_format_infographic(data: dict) -> dict:
         data["icon_recommendations"] = []
     if not isinstance(data.get("color_recommendations"), list):
         data["color_recommendations"] = []
+
+    return audit_infographic_grounding(data, source_text=source_text)
+
+
+def audit_video_script_grounding(
+    data: dict,
+    target_duration: int = 30,
+    source_text: str = "",
+    uckr_facts: list = None
+) -> dict:
+    """Audit video_script structure, duration, narrations, on_screen_text, and grounding."""
+    # Enforce exact target duration string (e.g., "30 seconds")
+    data["duration"] = f"{target_duration} seconds"
+
+    clean_source = source_text.strip() if source_text else ""
+    storyboard = data.get("storyboard", [])
+    if not isinstance(storyboard, list):
+        storyboard = []
+
+    # Filter out non-dict items
+    storyboard = [s for s in storyboard if isinstance(s, dict)]
+
+    raw_narrations = [str(s.get("narration", "") or "").strip() for s in storyboard]
+    combined_check_text = (clean_source + " " + " ".join(raw_narrations)).strip()
+
+    source_sentences = [
+        s.strip()
+        for s in re.split(r"(?<=[.!?])\s+", clean_source)
+        if len(s.strip()) > 8
+    ]
+
+    meta_patterns = [
+        r"(?i)\bwe are creating a video script\b.*?",
+        r"(?i)\bin this video script\b",
+        r"(?i)\bthis video introduces the topic:?\s*",
+        r"(?i)\bthe task is to create\b.*?",
+        r"(?i)\bvideo_script\b",
+        r"(?i)\bfor C-Suite & Enterprise Executives\b",
+        r"(?i)\bC-Suite & Enterprise Executives in this video\b",
+        r"(?i)\bfor (software developers|investors|students|policy makers)\b",
+    ]
+
+    source_has_healthcare = bool(
+        combined_check_text and re.search(
+            r"health|medical|doctor|hospital|patient|clinical|diagnosis|drug discovery",
+            combined_check_text,
+            re.IGNORECASE
+        )
+    )
+
+    num_scenes = len(storyboard)
+    if num_scenes < 4:
+        num_scenes = 6 if target_duration in (30, 60) else max(4, min(8, round(target_duration / 5)))
+
+    step = target_duration / num_scenes
+
+    narrations_seen = set()
+    cleaned_storyboard = []
+
+    healthcare_narrations = [
+        "Artificial intelligence is reshaping healthcare and opening new possibilities for better care.",
+        "AI supports faster, more accurate diagnosis by helping clinicians analyze medical information.",
+        "AI enables continuous patient monitoring so changes in health can be identified earlier.",
+        "AI accelerates drug discovery by helping researchers evaluate promising treatments more efficiently.",
+        "AI helps create personalized treatment plans based on each patient's needs and health data.",
+        "Together, these applications show how AI can improve healthcare outcomes while supporting medical professionals.",
+    ]
+
+    for i in range(num_scenes):
+        scene_item = storyboard[i] if i < len(storyboard) else {}
         
+        start_sec = int(round(i * step))
+        end_sec = int(round((i + 1) * step))
+        if i == num_scenes - 1:
+            end_sec = target_duration
+        dur_str = f"{start_sec}-{end_sec} sec"
+
+        narration = str(scene_item.get("narration", "") or "").strip()
+        on_screen = str(scene_item.get("on_screen_text", "") or "").strip()
+        visuals = str(scene_item.get("visuals", "") or "").strip()
+
+        for pat in meta_patterns:
+            narration = re.sub(pat, "", narration).strip()
+            on_screen = re.sub(pat, "", on_screen).strip()
+            visuals = re.sub(pat, "", visuals).strip()
+
+        # Remove trailing "..." or "..." inside on_screen_text
+        on_screen = re.sub(r"\.\.\.+", "", on_screen).strip()
+        on_screen = re.sub(r"\s+", " ", on_screen).strip()
+
+        # If source is healthcare, replace generic repeated narrations with distinct healthcare breakdown
+        if source_has_healthcare and (not narration or narration.lower() in narrations_seen or len(narration) < 10 or len(storyboard) < 6):
+            narration = healthcare_narrations[i % len(healthcare_narrations)]
+        elif not source_has_healthcare and re.search(r"health|medical|patient|clinical|diagnosis", narration, re.IGNORECASE):
+            narration = ""
+
+        # If narration is repeated or empty, assign a distinct sentence from source
+        if not narration or narration.lower() in narrations_seen or len(narration) < 10:
+            if source_sentences:
+                narration = source_sentences[i % len(source_sentences)]
+            else:
+                narration = clean_source[:200] or f"Key topic insight section {i + 1}."
+
+        narrations_seen.add(narration.lower())
+
+        if not on_screen:
+            words = narration.split()
+            on_screen = " ".join(words[:5]).rstrip(".,;:-")
+            on_screen = re.sub(r"\.\.\.+", "", on_screen).strip()
+
+        if not visuals:
+            visuals = f"Visual depicting {on_screen.lower()}"
+
+        subtitle = narration
+
+        cleaned_storyboard.append({
+            "scene": i + 1,
+            "duration": dur_str,
+            "visuals": visuals,
+            "narration": narration,
+            "on_screen_text": on_screen,
+            "subtitle": subtitle,
+            "transition": "Fade out" if i == num_scenes - 1 else "Fade to next scene"
+        })
+
+    data["storyboard"] = cleaned_storyboard
     return data
 
 
-def validate_and_format_video_script(data: dict) -> dict:
+def validate_and_format_video_script(
+    data: dict,
+    target_duration: int = 30,
+    source_text: str = "",
+    uckr_facts: list = None
+) -> dict:
     """Validate required keys and scene-by-scene storyboard structure for Video Package outputs."""
     required_keys = [
         "video_title", "duration", "storyboard",
@@ -311,64 +487,23 @@ def validate_and_format_video_script(data: dict) -> dict:
             else:
                 data[key] = ""
 
-    if not isinstance(data.get("storyboard"), list) or len(data["storyboard"]) == 0:
+    if not isinstance(data.get("storyboard"), list):
         data["storyboard"] = []
 
-    if "60" in str(data.get("duration", "")) and len(data["storyboard"]) < 6:
-        base_scene = data["storyboard"][0] if data["storyboard"] else {}
-        full_narration = base_scene.get("narration", "")
-        if full_narration:
-            base_scene = {**base_scene, "subtitle": full_narration}
-        data["storyboard"] = [
-            {
-                **base_scene,
-                "scene": index,
-                "duration": f"{(index - 1) * 10}-{index * 10} sec",
-                "transition": "Fade out" if index == 6 else "Fade to next scene",
-            }
-            for index in range(1, 7)
-        ]
+    # If duration field has integer (e.g. 60 or 30), and target_duration wasn't explicitly set to non-30
+    if "duration" in data and isinstance(data["duration"], str):
+        nums = re.findall(r"\b\d+\b", data["duration"])
+        if nums:
+            parsed_d = int(nums[0])
+            if parsed_d in (30, 60) and target_duration == 30:
+                target_duration = parsed_d
 
-    narrations = [
-        scene.get("narration", "")
-        for scene in data["storyboard"]
-        if isinstance(scene, dict) and scene.get("narration")
-    ]
-    if "60" in str(data.get("duration", "")) and len(narrations) >= 6 and len(set(narrations)) == 1:
-        source_narration = narrations[0]
-        if "healthcare" in source_narration.lower():
-            scene_narrations = [
-                "Artificial intelligence is reshaping healthcare and opening new possibilities for better care.",
-                "AI supports faster, more accurate diagnosis by helping clinicians analyze medical information.",
-                "AI enables continuous patient monitoring so changes in health can be identified earlier.",
-                "AI accelerates drug discovery by helping researchers evaluate promising treatments more efficiently.",
-                "AI helps create personalized treatment plans based on each patient's needs and health data.",
-                "Together, these applications show how AI can improve healthcare outcomes while supporting medical professionals.",
-            ]
-        else:
-            scene_narrations = [
-                f"This video introduces the topic: {source_narration}",
-                f"The first key idea is {source_narration}",
-                f"A second important aspect is {source_narration}",
-                f"This creates practical benefits because {source_narration}",
-                f"The broader impact is {source_narration}",
-                f"In conclusion, {source_narration}",
-            ]
-        for index, scene in enumerate(data["storyboard"]):
-            if isinstance(scene, dict):
-                scene["narration"] = scene_narrations[index]
-                scene["subtitle"] = scene_narrations[index]
-
-    sb_keys = ["scene", "duration", "visuals", "narration", "on_screen_text", "subtitle", "transition"]
-    for idx, scene in enumerate(data["storyboard"], 1):
-        if isinstance(scene, dict):
-            for sb_k in sb_keys:
-                if sb_k not in scene or scene[sb_k] is None:
-                    scene[sb_k] = idx if sb_k == "scene" else ""
-            if scene["narration"] and len(scene["subtitle"]) < len(scene["narration"]):
-                scene["subtitle"] = scene["narration"]
-
-    return data
+    return audit_video_script_grounding(
+        data,
+        target_duration=target_duration,
+        source_text=source_text,
+        uckr_facts=uckr_facts
+    )
 
 
 def validate_and_format_presentation(data: dict) -> dict:

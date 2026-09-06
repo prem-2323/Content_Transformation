@@ -46,6 +46,16 @@ export default function App() {
   const [loadedSession, setLoadedSession] = useState<any>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [keepInitialText, setKeepInitialText] = useState('');
+  const [formResetKey, setFormResetKey] = useState<number>(0);
+
+  const handleStartNewTransformation = () => {
+    setKeepInitialText('');
+    setTransformationResult(null);
+    setTransformError(null);
+    setIsLoading(false);
+    setFormResetKey((prev) => prev + 1);
+    setActiveTab('transform');
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -226,7 +236,7 @@ export default function App() {
 
               {activeTab === 'transform' && (
                 <TransformationForm
-                  key={keepInitialText || 'default'}
+                  key={formResetKey || keepInitialText || 'default'}
                   onRunTransform={handleRunTransform}
                   isLoading={isLoading}
                   onCancel={() => setIsLoading(false)}
@@ -248,6 +258,7 @@ export default function App() {
                 <ResultsWorkspace
                   transformationResult={transformationResult}
                   onNavigateToIntelligence={() => setActiveTab('intelligence')}
+                  onStartNewTransformation={handleStartNewTransformation}
                 />
               )}
 

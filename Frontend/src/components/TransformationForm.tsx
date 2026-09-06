@@ -180,6 +180,7 @@ export const TransformationForm: React.FC<TransformationFormProps> = ({ onRunTra
       language,
       detail_level: detailLevel,
       objective,
+      duration: 30,
       output_types: selectedOutputs,
       mp3_addons: selectedMp3Addons
     };
