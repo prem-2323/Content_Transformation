@@ -166,8 +166,11 @@ def clean_reasoning_and_leakage(raw_text: str) -> str:
         prev = cleaned
         cleaned = re.sub(r"(?is)^\s*(okay|sure|certainly|alright),?\s*(the user wants|let'?s|i need to|i will|we are given|we need to|we are to|let me).*?(\n\n|\.\s+|\n)", "", cleaned)
         cleaned = re.sub(r"(?is)^\s*(we are given|we are to create|the task is to|the task is|the user wants|in this task|to summarize the provided|as requested|based on the source content).*?:\s*", "", cleaned)
+        cleaned = re.sub(r"(?is)^\s*(?:however,?\s*note|the instructions say|the source \(the context\) has|the source has|but note:?\s*(?:the user'?s request is)?|the user'?s request is to|the context provided).*?(\n\n|\.\s+|\n)", "", cleaned)
+        cleaned = re.sub(r"(?is)^\s*the output must be a json.*?(\n\n|\.\s+|\n)", "", cleaned)
         cleaned = re.sub(r"(?is)^\s*steps:\s*(\n\s*\d+\..*?)+(?=\n\n|\Z)", "", cleaned)
         cleaned = re.sub(r"(?is)^\s*(?:\d+\.\s+)?we (?:are to|must|need to|should|will)\s+.*?(\n\n|\.\s+|\n)", "", cleaned)
+        cleaned = re.sub(r"(?is)^\s*(?:we are to write|we should write|let'?s write)\s*:?.*?(\n\n|\.\s+|\n)", "", cleaned)
         cleaned = re.sub(r"(?is)^\s*important\s*:\s*(\n\s*[-*•\d.]\s*.*?)+(?=\n\n|\Z)", "", cleaned)
         cleaned = re.sub(r"(?is)^\s*let'?s\s+(?:extract|look at|review|break down|analyze|start by|examine).*?(\n\n|\.\s+|\n|:\s*)", "", cleaned)
         cleaned = re.sub(r"(?is)^\s*-\s*(executive overview|key highlights|strategic implication).*?\n(?:\s*-\s*.*?\n)*", "", cleaned)

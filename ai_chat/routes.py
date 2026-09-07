@@ -13,6 +13,7 @@ from .chat_models import (
 
 from .content_router import detect_intent, ACTION_INTENTS
 from .llm_service import LocalLLM
+from validation import clean_reasoning_and_leakage, extract_json_payload
 
 
 router = APIRouter(
@@ -136,21 +137,36 @@ ambiguous, ask one short clarifying question.
 
 
 def clean_llm_response(text: str) -> str:
-    """Remove Qwen reasoning blocks and accidental markup artifacts."""
-    text = text.strip()
+    """Remove Qwen reasoning blocks, prompt echoes, and accidental markup artifacts."""
+    if not text or not isinstance(text, str):
+        return ""
 
-    if "<think>" in text:
-        parts = text.split("</think>", 1)
-        if len(parts) == 2:
-            text = parts[1]
+    cleaned = clean_reasoning_and_leakage(text)
 
-    if "<|thinking|>" in text:
-        parts = text.split("<|end|>", 1)
-        if len(parts) == 2:
-            text = parts[1]
+    # If the response is wrapped inside JSON, extract the primary human-readable content
+    parsed = extract_json_payload(cleaned)
+    if isinstance(parsed, dict):
+        if "reply" in parsed and isinstance(parsed["reply"], str):
+            cleaned = parsed["reply"]
+        elif "content" in parsed and isinstance(parsed["content"], str):
+            cleaned = parsed["content"]
+        elif "summary" in parsed and isinstance(parsed["summary"], str):
+            cleaned = parsed["summary"]
+        elif "text" in parsed and isinstance(parsed["text"], str):
+            cleaned = parsed["text"]
+        elif "outputs" in parsed and isinstance(parsed["outputs"], dict):
+            first_val = next(iter(parsed["outputs"].values()), None)
+            if isinstance(first_val, str):
+                cleaned = first_val
+        elif "outputs" in parsed and isinstance(parsed["outputs"], str):
+            cleaned = parsed["outputs"]
 
-    cleaned = [line for line in text.splitlines() if line.strip().lower() != "svg"]
-    return "\n".join(cleaned).strip()
+    # Secondary reasoning pass after JSON unwrap
+    cleaned = clean_reasoning_and_leakage(cleaned)
+
+    # Filter out standalone artifact words
+    lines = [line for line in cleaned.splitlines() if line.strip().lower() != "svg"]
+    return "\n".join(lines).strip()
 
 
 def build_system_prompt(

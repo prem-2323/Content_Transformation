@@ -72,7 +72,7 @@ class LocalLLM:
             "options": {
                 "temperature": 0.3,
                 "num_ctx": 2048,
-                "num_predict": 300
+                "num_predict": 1024
             }
         }
 
@@ -115,7 +115,7 @@ class LocalLLM:
             "options": {
                 "temperature": 0.3,
                 "num_ctx": 2048,
-                "num_predict": 300
+                "num_predict": 1024
             }
         }
 
