@@ -10,8 +10,6 @@ import { SmartChatbot } from './components/SmartChatbot';
 import { ApiExplorer } from './components/ApiExplorer';
 import { VisualStudioWrapper } from './components/VisualStudioWrapper';
 import { VideoStudioWrapper } from './components/VideoStudioWrapper';
-import { QualityValidationWrapper } from './components/QualityValidationWrapper';
-import { OutputControlsWrapper } from './components/OutputControlsWrapper';
 import { PresentationStudio } from './components/PresentationStudio';
 import { BottomNavbar } from './components/BottomNavbar';
 import { OpenApiModal } from './components/OpenApiModal';
@@ -264,24 +262,6 @@ export default function App() {
 
               {activeTab === 'presentation' && (
                 <PresentationStudio />
-              )}
-
-              {(activeTab === 'output_controls' || activeTab === 'audience' || activeTab === 'brand_voice' || activeTab === 'translation') && (
-                <OutputControlsWrapper initialSubTab={
-                  activeTab === 'brand_voice' ? 'brand_voice' :
-                  activeTab === 'translation' ? 'translation' : 'audience'
-                } />
-              )}
-
-              {(activeTab === 'quality_validation' || activeTab === 'registry' || activeTab === 'pipeline' || activeTab === 'quality' || activeTab === 'intelligence') && (
-                <QualityValidationWrapper
-                  transformationResult={transformationResult}
-                  initialSubTab={
-                    activeTab === 'pipeline' ? 'pipeline' :
-                    activeTab === 'quality' ? 'quality' :
-                    activeTab === 'intelligence' ? 'intelligence' : 'registry'
-                  }
-                />
               )}
 
               {activeTab === 'chatbot' && (

@@ -12,10 +12,11 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({ activeTab, setActive
 
   const navItems = [
     { id: 'transform', label: 'Transform', faIcon: 'fa-solid fa-wand-magic-sparkles' },
+    { id: 'results', label: 'Results', faIcon: 'fa-solid fa-file-lines' },
     { id: 'visual_studio', label: 'Visual', faIcon: 'fa-solid fa-eye' },
     { id: 'video_studio', label: 'Video', faIcon: 'fa-solid fa-clapperboard' },
-    { id: 'quality_validation', label: 'Quality', faIcon: 'fa-solid fa-shield-halved' },
-    { id: 'output_controls', label: 'Controls', faIcon: 'fa-solid fa-sliders' },
+    { id: 'presentation', label: 'Presentation', faIcon: 'fa-solid fa-file-powerpoint' },
+    { id: 'chatbot', label: 'AI Assistant', faIcon: 'fa-solid fa-robot' },
   ];
 
   return (

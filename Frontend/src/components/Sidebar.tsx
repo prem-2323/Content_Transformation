@@ -33,13 +33,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
       ]
     },
     {
-      title: 'GOVERNANCE & CONTROLS',
-      items: [
-        { id: 'output_controls', label: 'Output Controls', faIcon: 'fa-solid fa-sliders' },
-        { id: 'quality_validation', label: 'Quality & Validation', faIcon: 'fa-solid fa-shield-halved' },
-      ]
-    },
-    {
       title: 'TOOLS & EXTENSIONS',
       items: [
         { id: 'chatbot', label: 'AI Assistant', faIcon: 'fa-solid fa-robot' },
