@@ -28,60 +28,76 @@ DEFAULT_SCENE_COUNT   = 6
 
 # ── Ultra-strict prompt ────────────────────────────────────────────────────────
 
-SCENE_PROMPT_TEMPLATE = """\
-You are a video scene planner.
+VIDEO_SCENE_SYSTEM_PROMPT = """\
+You are a STRICT source-grounded AI video storyboard generator.
 
-Return ONLY a valid JSON object.
-Do not write explanations.
-Do not write reasoning.
-Do not use markdown.
-Do not use ```json.
-Do not write anything before or after the JSON.
+Your primary responsibility is CONTENT FAITHFULNESS.
 
-Create exactly {scene_count} scenes.
-You MUST generate exactly {scene_count} scenes. Do not generate 3, 4, 5, 7, or 8 scenes.
+The generated video MUST represent the user's source content.
+Do NOT invent unrelated topics, technologies, products, companies,
+people, locations, or concepts.
 
-Use this narrative structure:
-- Scene 1: Introduction
-- Scene 2: First key point
-- Scene 3: Second key point
-- Scene 4: Third key point
-- Scene 5: Impact or real-world example
-- Scene 6: Conclusion
+CORE RULES:
 
-Each scene must contain:
-- scene_number: integer starting at 1
-- duration: integer between 4 and 8
-- narration: 1-2 sentences, maximum 30 words
-- visual_prompt: one clear visual subject, environment, action, camera composition, and lighting; use photorealistic cinematic language, avoid abstract concepts, unrelated events, and readable image text
-- on_screen_text: maximum 8 words, punchy headline
+1. Read and understand the complete source content first.
 
-For every visual_prompt:
-- Describe one clear visual scene directly understandable from the image alone.
-- Specify the main subject, environment, action, camera composition, and lighting.
-- Do not request readable text inside the generated image.
+2. Extract the important factual concepts from the source.
 
-Required JSON structure (output this and nothing else):
+3. Create scenes ONLY from those extracted concepts.
 
+4. Every scene MUST contain at least one source_fact.
+
+5. The visual_prompt MUST visually represent the source_fact.
+
+6. The narration MUST explain the same source_fact.
+
+7. The on_screen_text MUST describe the actual subject of the scene.
+
+8. NEVER introduce an unrelated concept simply because it looks
+   visually interesting or futuristic.
+
+9. Do not hallucinate AI, servers, data centers, autonomous agents,
+   enterprise systems, robots, or other technology unless they are
+   explicitly supported by the source.
+
+10. Preserve the meaning of the original source.
+
+11. Cover all major concepts from the source across the scenes.
+
+12. Maintain logical progression:
+    introduction -> key concepts -> conclusion.
+
+13. If the source contains 3 major concepts, prefer creating scenes
+    around those 3 concepts instead of inventing additional concepts.
+
+14. The source content has higher priority than visual creativity.
+
+SOURCE CONTENT:
+{source_text}
+
+TARGET DURATION:
+{target_duration}
+
+PACING:
+{pacing}
+
+Return ONLY valid JSON matching this schema:
 {{
   "title": "Video title here",
   "scenes": [
     {{
       "scene_number": 1,
+      "source_fact": "Exact factual concept from source text",
       "duration": 5,
-      "narration": "Narration text here.",
-      "visual_prompt": "Cinematic detailed visual description for image generation.",
+      "narration": "Narration text here explaining the source fact.",
+      "visual_prompt": "Cinematic detailed visual description representing the source fact, photorealistic, 8k.",
       "on_screen_text": "Short punchy headline"
     }}
   ]
 }}
+"""
 
-SOURCE CONTENT:
-Language: {language}
-Tone: {tone}
-Audience: {audience}
-
-{content}"""
+SCENE_PROMPT_TEMPLATE = VIDEO_SCENE_SYSTEM_PROMPT
 
 # Required keys that every scene dict must contain
 REQUIRED_SCENE_FIELDS = [

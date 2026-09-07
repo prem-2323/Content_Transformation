@@ -34,14 +34,29 @@ from video.tts import generate_narration, DEFAULT_VOICE
 IMAGES_DIR = Path(os.getenv("IMAGE_STORAGE", "generated_images"))
 AUDIO_DIR  = Path(os.getenv("AUDIO_STORAGE", "generated_audio"))
 
-# Shared negative prompt for all scene images
-DEFAULT_IMAGE_STYLE = (
-    "Photorealistic cinematic documentary style, realistic modern environment, "
-    "professional visual storytelling, natural realistic lighting, realistic colors, "
-    "highly detailed, sharp focus, realistic human anatomy, realistic architecture, "
-    "cinematic composition, wide shot"
-)
-DEFAULT_NEGATIVE_PROMPT = IMAGE_DEFAULT_NEGATIVE_PROMPT
+# Shared style suffix for all scene images
+DEFAULT_IMAGE_STYLE = "photorealistic, cinematic lighting, sharp focus, 8k, highly detailed, masterpiece"
+DEFAULT_NEGATIVE_PROMPT = "blurry, low quality, distorted, deformed, watermark, text, logo, signature, ugly, extra limbs, bad anatomy, amateur photography, noisy, oversaturated"
+
+GROUNDED_VISUAL_PROMPT = """\
+Create a realistic visual representation of the following source fact.
+
+SOURCE FACT:
+{source_fact}
+
+SCENE TOPIC:
+{scene_topic}
+
+STRICT REQUIREMENTS:
+- Visually represent the source fact.
+- Do not introduce unrelated concepts.
+- Do not add enterprise AI, autonomous agents, servers,
+  data centers, robots, or other technology unless present
+  in the source fact.
+- Prioritize factual accuracy over visual creativity.
+- The image must clearly communicate the scene topic.
+- Photorealistic cinematic style.\
+"""
 
 
 # ── Step 7: Scene Image Generation ────────────────────────────────────────────
@@ -55,6 +70,7 @@ def generate_scene_image(
     steps: int = DEFAULT_STEPS,
     cfg_scale: int = DEFAULT_CFG_SCALE,
     sampler_name: str = DEFAULT_SAMPLER,
+    prefix: str = "scene",
 ) -> str:
     """Generate and save one scene image via Forge API.
 
@@ -62,8 +78,9 @@ def generate_scene_image(
         scene:           Scene dict with at least a 'visual_prompt' key.
         index:           1-based scene index (used for the filename).
         negative_prompt: Negative prompt forwarded to Stable Diffusion.
-        width / height:  Image dimensions (512×512 default for RTX 3050).
+        width / height:  Image dimensions.
         steps:           Diffusion steps.
+        prefix:          File prefix for uniqueness.
 
     Returns:
         Absolute path to the saved PNG file.
@@ -73,9 +90,10 @@ def generate_scene_image(
     """
     IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 
-    visual_prompt = scene.get("visual_prompt", "cinematic scene, highly detailed")
-    prompt = f"{DEFAULT_IMAGE_STYLE}, {visual_prompt.strip()}"
-    filename = f"scene_{index:02d}.png"
+    visual_prompt = scene.get("visual_prompt", "cinematic technology scene, highly detailed, photorealistic")
+    # Put visual_prompt first so CLIP attention prioritizes the topic subject
+    prompt = f"{visual_prompt.strip()}, {DEFAULT_IMAGE_STYLE}"
+    filename = f"{prefix}_{index:02d}.png"
     output_path = IMAGES_DIR / filename
 
     raw_res = generate_image_bytes(
@@ -105,11 +123,13 @@ def generate_all_scene_images(
     steps: int = DEFAULT_STEPS,
     cfg_scale: int = DEFAULT_CFG_SCALE,
     sampler_name: str = DEFAULT_SAMPLER,
+    prefix: str = "scene",
 ) -> list[str]:
     """Generate one PNG per scene (sequential — Forge handles one job at a time).
 
     Args:
-        scenes: List of scene dicts from scene_generator.generate_video_scenes().
+        scenes: List of scene dicts.
+        prefix: Unique filename prefix.
 
     Returns:
         Ordered list of PNG file paths, matching the input scene order.
@@ -128,6 +148,7 @@ def generate_all_scene_images(
             steps=steps,
             cfg_scale=cfg_scale,
             sampler_name=sampler_name,
+            prefix=prefix,
         )
         image_paths.append(path)
     return image_paths
@@ -139,6 +160,7 @@ async def generate_scene_audio(
     scene: dict,
     index: int,
     voice: str = DEFAULT_VOICE,
+    prefix: str = "scene",
 ) -> str:
     """Generate and save one MP3 narration for a scene via Edge TTS.
 
@@ -146,6 +168,7 @@ async def generate_scene_audio(
         scene: Scene dict with at least a 'narration' key.
         index: 1-based scene index (used for the filename).
         voice: Edge TTS voice name.
+        prefix: Unique filename prefix.
 
     Returns:
         Absolute path to the saved MP3 file.
@@ -153,7 +176,7 @@ async def generate_scene_audio(
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 
     narration_text = scene.get("narration", "").strip() or f"Scene {index}."
-    output_file = str(AUDIO_DIR / f"scene_{index:02d}.mp3")
+    output_file = str(AUDIO_DIR / f"{prefix}_{index:02d}.mp3")
 
     await generate_narration(text=narration_text, output_file=output_file, voice=voice)
     return output_file
@@ -162,18 +185,20 @@ async def generate_scene_audio(
 async def generate_all_scene_audio(
     scenes: list,
     voice: str = DEFAULT_VOICE,
+    prefix: str = "scene",
 ) -> list[str]:
     """Generate all scene narration MP3s concurrently via Edge TTS.
 
     Args:
-        scenes: List of scene dicts from scene_generator.generate_video_scenes().
+        scenes: List of scene dicts.
         voice:  Edge TTS voice name.
+        prefix: Unique filename prefix.
 
     Returns:
         Ordered list of MP3 file paths matching the input scene order.
     """
     tasks = [
-        generate_scene_audio(scene=scene, index=i, voice=voice)
+        generate_scene_audio(scene=scene, index=i, voice=voice, prefix=prefix)
         for i, scene in enumerate(scenes, start=1)
     ]
     return list(await asyncio.gather(*tasks))

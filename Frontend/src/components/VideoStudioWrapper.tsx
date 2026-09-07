@@ -1,18 +1,19 @@
 import React, { useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
+import { VideoGenerator } from './VideoGenerator';
 import { SceneGenerator } from './SceneGenerator';
 import { VideoPlanner } from './VideoPlanner';
 import { VideoStudio } from './VideoStudio';
 import { AudioStudio } from './AudioStudio';
-import { Film, Video, Clapperboard, Volume2 } from 'lucide-react';
+import { Film, Video, Clapperboard, Volume2, Sparkles } from 'lucide-react';
 
-type VideoSubTab = 'scene' | 'video_plan' | 'video' | 'audio';
+type VideoSubTab = 'video_generator' | 'scene' | 'video_plan' | 'video' | 'audio';
 
 interface VideoStudioWrapperProps {
   initialSubTab?: VideoSubTab;
 }
 
-export const VideoStudioWrapper: React.FC<VideoStudioWrapperProps> = ({ initialSubTab = 'scene' }) => {
+export const VideoStudioWrapper: React.FC<VideoStudioWrapperProps> = ({ initialSubTab = 'video_generator' }) => {
   const { isDarkMode } = useTheme();
   const [subTab, setSubTab] = useState<VideoSubTab>(initialSubTab);
 
@@ -27,13 +28,25 @@ export const VideoStudioWrapper: React.FC<VideoStudioWrapperProps> = ({ initialS
             <span className="text-[#1ed760]">Video Studio</span>
           </h2>
           <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-[#b3b3b3]' : 'text-slate-500'}`}>
-            End-to-End Multimodal Video Suite: Storyboard, Scene Prompts, Assembly & Neural TTS Audio
+            End-to-End Multimodal Video Suite: AI Video Generator, Scene Storyboard, Planner & Neural Audio
           </p>
         </div>
 
         <div className={`p-1 rounded-xl border flex items-center space-x-1 flex-wrap gap-1 ${
           isDarkMode ? 'bg-[#181818] border-white/10' : 'bg-slate-100 border-slate-300'
         }`}>
+          <button
+            onClick={() => setSubTab('video_generator')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer ${
+              subTab === 'video_generator'
+                ? 'bg-[#1ed760] text-black shadow-md'
+                : isDarkMode ? 'text-slate-300 hover:text-white' : 'text-slate-700 hover:text-slate-900'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>AI Video Generator</span>
+          </button>
+
           <button
             onClick={() => setSubTab('scene')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer ${
@@ -86,6 +99,7 @@ export const VideoStudioWrapper: React.FC<VideoStudioWrapperProps> = ({ initialS
 
       {/* Render Active Sub-Studio */}
       <div className="px-4 sm:px-6">
+        {subTab === 'video_generator' && <VideoGenerator />}
         {subTab === 'scene' && <SceneGenerator />}
         {subTab === 'video_plan' && <VideoPlanner />}
         {subTab === 'video' && <VideoStudio />}

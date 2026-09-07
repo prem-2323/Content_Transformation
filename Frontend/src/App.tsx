@@ -252,11 +252,12 @@ export default function App() {
                 <VisualStudioWrapper initialSubTab={activeTab === 'image' ? 'image' : 'visual'} />
               )}
 
-              {(activeTab === 'video_studio' || activeTab === 'scene' || activeTab === 'video_plan' || activeTab === 'video' || activeTab === 'audio') && (
+              {(activeTab === 'video_studio' || activeTab === 'video_generator' || activeTab === 'scene' || activeTab === 'video_plan' || activeTab === 'video' || activeTab === 'audio') && (
                 <VideoStudioWrapper initialSubTab={
+                  activeTab === 'scene' ? 'scene' :
                   activeTab === 'video_plan' ? 'video_plan' :
                   activeTab === 'video' ? 'video' :
-                  activeTab === 'audio' ? 'audio' : 'scene'
+                  activeTab === 'audio' ? 'audio' : 'video_generator'
                 } />
               )}
 

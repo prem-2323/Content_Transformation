@@ -95,11 +95,10 @@ class ImagePipelineSingleton:
         Execute image generation with exact performance measurement and inference mode optimization.
         Returns: (image_bytes, generation_time_in_seconds, device_name)
         """
-        # Resolve mode overrides if provided
-        if mode in MODE_CONFIGS:
-            cfg = MODE_CONFIGS[mode]
-            if steps == 10 and mode != "fast":  # Apply step defaults from mode
-                steps = cfg["steps"]
+        # Use caller-supplied width, height, and steps directly
+        steps = max(1, min(50, int(steps)))
+        width = max(256, min(1536, int(width)))
+        height = max(256, min(1536, int(height)))
 
         start_time = time.perf_counter()
 

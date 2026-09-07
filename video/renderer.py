@@ -1,11 +1,11 @@
 """
 video/renderer.py
 ~~~~~~~~~~~~~~~~~
-Step 9  — Determine scene duration from actual MP3 duration (via ffprobe).
-Step 10 — Combine scene_XX.png + scene_XX.mp3 → scene_XX.mp4  (via FFmpeg).
-Step 11 — Generate a .srt subtitle file from scene narrations + durations.
-Step 12 — Concatenate all scene MP4s into final_video.mp4.
-Step 13 — Burn subtitles into the final video → final_video_subtitled.mp4.
+Step 9  - Determine scene duration from actual MP3 duration (via ffprobe).
+Step 10 - Combine scene_XX.png + scene_XX.mp3 -> scene_XX.mp4  (via FFmpeg).
+Step 11 - Generate a .srt subtitle file from scene narrations + durations.
+Step 12 - Concatenate all scene MP4s into final_video.mp4.
+Step 13 - Burn subtitles into the final video -> final_video_subtitled.mp4.
 """
 
 import json
@@ -14,7 +14,7 @@ import subprocess
 from pathlib import Path
 
 
-# ── Paths ──────────────────────────────────────────────────────────────────────
+# -- Paths ----------------------------------------------------------------------
 
 IMAGES_DIR = Path(os.getenv("IMAGE_STORAGE",  "generated_images"))
 AUDIO_DIR  = Path(os.getenv("AUDIO_STORAGE",  "generated_audio"))
@@ -25,7 +25,7 @@ VIDEO_DIR  = Path(os.getenv("VIDEO_STORAGE",  "generated_videos"))
 TAIL_PADDING = 0.5
 
 
-# ── Step 9: Get real MP3 duration via ffprobe ──────────────────────────────────
+# -- Step 9: Get real MP3 duration via ffprobe ----------------------------------
 
 def get_audio_duration(audio_path: str) -> float:
     """Return the duration of an audio file in seconds using ffprobe.
@@ -96,35 +96,34 @@ def get_scene_duration(audio_path: str, padding: float = TAIL_PADDING) -> float:
     return round(get_audio_duration(audio_path) + padding, 2)
 
 
-# ── Step 10: PNG + MP3 → MP4 via FFmpeg ───────────────────────────────────────
+# -- Step 10: PNG + MP3 -> MP4 via FFmpeg ---------------------------------------
 
 def render_scene_video(
     image_path: str,
     audio_path: str,
     output_path: str,
     duration: float | None = None,
+    width: int = 512,
+    height: int = 512,
 ) -> str:
     """Combine one scene image + one narration MP3 into a scene MP4.
 
     Uses:
         - libx264 (stillimage tune) for the video stream
-        - aac for the audio stream
-        - -shortest to stop when the audio ends
+        - aac for the audio stream with apad padding to sustain full planned duration
         - yuv420p pixel format for maximum player compatibility
+        - Configured width x height resolution
 
     Args:
         image_path:  Path to the scene PNG file.
         audio_path:  Path to the scene MP3 file.
         output_path: Destination path for the output MP4 file.
-        duration:    Optional explicit duration in seconds. If None, the scene
-                     length is determined from the MP3 duration via ffprobe.
+        duration:    Target duration in seconds.
+        width:       Target video width in pixels.
+        height:      Target video height in pixels.
 
     Returns:
         The output_path on success.
-
-    Raises:
-        FileNotFoundError: If image or audio file is missing.
-        RuntimeError:      If FFmpeg is not on PATH or returns a non-zero exit.
     """
     if not Path(image_path).is_file():
         raise FileNotFoundError(f"Scene image not found: {image_path}")
@@ -134,24 +133,33 @@ def render_scene_video(
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
     # Determine duration from actual MP3 if not supplied
-    if duration is None:
-        duration = get_scene_duration(audio_path)
+    audio_dur = get_scene_duration(audio_path)
+    if duration is None or duration <= 0:
+        duration = audio_dur
+    else:
+        # Never cut off narration if speech is longer than planned duration
+        duration = max(float(duration), audio_dur)
+
+    # Ensure width & height are even numbers (required by libx264)
+    w = width if width % 2 == 0 else width + 1
+    h = height if height % 2 == 0 else height + 1
 
     cmd = [
         "ffmpeg",
         "-y",                         # overwrite without asking
         "-loop", "1",                 # loop the still image
-        "-t", str(duration),          # exactly this many seconds of video
+        "-t", str(duration),          # input 0 duration
         "-i", image_path,             # input 0: image
         "-i", audio_path,             # input 1: audio
         "-c:v", "libx264",
         "-tune", "stillimage",        # optimise encoder for still images
+        "-af", "apad",                # pad audio with silence if narration is shorter than video duration
         "-c:a", "aac",
         "-b:a", "128k",
-        "-shortest",                  # stop at the shorter stream (audio)
+        "-t", str(duration),          # exact total duration
         "-pix_fmt", "yuv420p",        # broad device compatibility
         "-movflags", "+faststart",    # web-optimised MP4
-        "-vf", "scale=512:512",       # ensure consistent resolution
+        "-vf", f"scale={w}:{h}",      # calibrated resolution
         output_path,
     ]
 
@@ -179,6 +187,9 @@ def render_all_scene_videos(
     audio_paths: list[str],
     output_dir: str | None = None,
     prefix: str = "scene",
+    durations: list[float] | None = None,
+    width: int = 512,
+    height: int = 512,
 ) -> list[str]:
     """Render one MP4 per scene and return ordered list of output paths.
 
@@ -186,14 +197,13 @@ def render_all_scene_videos(
         image_paths: Ordered list of scene PNG paths (from service.py Step 7).
         audio_paths: Ordered list of scene MP3 paths (from service.py Step 8).
         output_dir:  Directory to write scene MP4s (defaults to VIDEO_DIR).
-        prefix:      Filename prefix (e.g. "scene" → scene_01.mp4).
+        prefix:      Filename prefix (e.g. "scene" -> scene_01.mp4).
+        durations:   Planned durations for each scene in seconds.
+        width:       Target video width.
+        height:      Target video height.
 
     Returns:
         Ordered list of scene MP4 file paths.
-
-    Raises:
-        ValueError:  If image_paths and audio_paths lengths don't match.
-        RuntimeError / FileNotFoundError: On FFmpeg or file errors.
     """
     if len(image_paths) != len(audio_paths):
         raise ValueError(
@@ -206,23 +216,25 @@ def render_all_scene_videos(
     scene_video_paths = []
 
     for i, (img, audio) in enumerate(zip(image_paths, audio_paths), start=1):
-        # Step 9: derive duration from actual MP3
-        duration = get_scene_duration(audio)
+        target_dur = None
+        if durations and i - 1 < len(durations):
+            target_dur = durations[i - 1]
 
-        # Step 10: PNG + MP3 → scene_XX.mp4
         output_path = str(out_dir / f"{prefix}_{i:02d}.mp4")
         render_scene_video(
             image_path=img,
             audio_path=audio,
             output_path=output_path,
-            duration=duration,
+            duration=target_dur,
+            width=width,
+            height=height,
         )
         scene_video_paths.append(output_path)
 
     return scene_video_paths
 
 
-# ── Step 11: Generate SRT subtitle file ───────────────────────────────────────
+# -- Step 11: Generate SRT subtitle file ----------------------------------------
 
 def _seconds_to_srt_timestamp(seconds: float) -> str:
     """Convert a float seconds value to SRT timestamp format HH:MM:SS,mmm."""
@@ -237,17 +249,17 @@ def generate_srt(
     scenes: list,
     audio_paths: list[str],
     output_path: str | None = None,
+    durations: list[float] | None = None,
 ) -> str:
-    """Build an SRT subtitle file driven by actual MP3 durations.
+    """Build an SRT subtitle file driven by actual scene durations and audio timings.
 
-    Each subtitle block uses the real narration duration (via ffprobe) so
-    timestamps are perfectly in sync with the generated audio.
+    Each subtitle block is synchronized to the scene timeline.
 
     Args:
         scenes:      Ordered list of scene dicts (must have 'narration' key).
         audio_paths: Ordered list of MP3 paths matching the scenes.
         output_path: Where to write the .srt file.
-                     Defaults to subtitles/video.srt.
+        durations:   Optional explicit scene durations in seconds.
 
     Returns:
         The output path of the written .srt file.
@@ -263,7 +275,12 @@ def generate_srt(
     cursor = 0.0  # running timecode in seconds
 
     for i, (scene, audio) in enumerate(zip(scenes, audio_paths), start=1):
-        duration   = get_scene_duration(audio)          # real MP3 duration + padding
+        audio_dur = get_scene_duration(audio)
+        if durations and i - 1 < len(durations):
+            duration = max(float(durations[i - 1]), audio_dur)
+        else:
+            duration = audio_dur
+
         start_time = _seconds_to_srt_timestamp(cursor)
         end_time   = _seconds_to_srt_timestamp(cursor + duration)
         narration  = scene.get("narration", "").strip() or f"Scene {i}."
@@ -280,7 +297,7 @@ def generate_srt(
     return output_path
 
 
-# ── Step 12: Concatenate scene MP4s → final_video.mp4 ─────────────────────────
+# -- Step 12: Concatenate scene MP4s -> final_video.mp4 --------------------------
 
 def concatenate_scene_videos(
     scene_video_paths: list[str],
@@ -291,13 +308,9 @@ def concatenate_scene_videos(
     Args:
         scene_video_paths: Ordered list of scene MP4 paths.
         output_path:       Destination for the final concatenated MP4.
-                           Defaults to generated_videos/final_video.mp4.
 
     Returns:
         The output_path on success.
-
-    Raises:
-        RuntimeError: If FFmpeg fails or is not on PATH.
     """
     if output_path is None:
         VIDEO_DIR.mkdir(parents=True, exist_ok=True)
@@ -306,7 +319,7 @@ def concatenate_scene_videos(
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
     # Write a temporary concat list file
-    concat_list_path = Path(output_path).parent / "_concat_list.txt"
+    concat_list_path = Path(output_path).parent / f"_concat_list_{Path(output_path).stem}.txt"
     lines = [f"file '{Path(p).resolve().as_posix()}'" for p in scene_video_paths]
     concat_list_path.write_text("\n".join(lines), encoding="utf-8")
 
@@ -316,7 +329,7 @@ def concatenate_scene_videos(
         "-f", "concat",
         "-safe", "0",
         "-i", str(concat_list_path),
-        "-c", "copy",               # stream copy — no re-encoding, fast
+        "-c", "copy",               # stream copy - no re-encoding, fast
         "-movflags", "+faststart",
         output_path,
     ]
@@ -335,32 +348,29 @@ def concatenate_scene_videos(
     return output_path
 
 
-# ── Step 13: Burn subtitles into final video ───────────────────────────────────
+# -- Step 13: Burn subtitles into final video -----------------------------------
 
 def burn_subtitles(
     video_path: str,
     srt_path: str,
     output_path: str | None = None,
+    font_size: int = 22,
 ) -> str:
     """Hard-burn SRT subtitles into the video using FFmpeg subtitles filter.
 
     The subtitles are rendered with a legible style:
         - White text with a semi-transparent black outline
         - Positioned at the bottom-centre
-        - FontSize 20 (readable at 512px width)
+        - Dynamically sized font based on video resolution
 
     Args:
         video_path:  Path to the raw final_video.mp4.
         srt_path:    Path to the .srt subtitle file.
         output_path: Destination for the subtitled MP4.
-                     Defaults to generated_videos/final_video_subtitled.mp4.
+        font_size:   Subtitle font size in points.
 
     Returns:
         The output_path on success.
-
-    Raises:
-        FileNotFoundError: If video or SRT file is missing.
-        RuntimeError:      If FFmpeg fails.
     """
     if not Path(video_path).is_file():
         raise FileNotFoundError(f"Video not found: {video_path}")
@@ -378,11 +388,11 @@ def burn_subtitles(
 
     subtitle_style = (
         "FontName=Arial,"
-        "FontSize=20,"
+        f"FontSize={font_size},"
         "PrimaryColour=&H00FFFFFF,"   # white text
         "OutlineColour=&H80000000,"   # semi-transparent black outline
         "BorderStyle=3,"
-        "Outline=1,"
+        "Outline=1.5,"
         "Shadow=0,"
         "Alignment=2"                 # bottom-centre
     )

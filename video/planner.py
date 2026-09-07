@@ -41,9 +41,9 @@ def determine_scene_count(target_duration: float, pacing: str = "balanced") -> i
     Determine the optimal number of scenes based on target duration and pacing.
 
     Standard pacing profiles:
-    - 'fast': ~3.5s - 4.0s per scene (high energy, social shorts, TikTok/Reels)
-    - 'balanced': ~5.0s per scene (standard documentary, informative, default)
-    - 'cinematic': ~6.0s - 7.5s per scene (atmospheric, deep narrative, presentation)
+    - 'fast': ~3.75s per scene (high energy, viral, shorts, reels)
+    - 'balanced': ~5.0s per scene (standard documentary, default)
+    - 'cinematic': ~6.0s per scene (atmospheric, immersive narrative, presentation)
     """
     pacing_lower = pacing.lower().strip()
     if pacing_lower == "fast":
@@ -54,8 +54,32 @@ def determine_scene_count(target_duration: float, pacing: str = "balanced") -> i
         avg_scene_len = 5.0
 
     raw_count = target_duration / avg_scene_len
-    scene_count = max(3, min(16, round(raw_count)))
+    scene_count = max(2, min(24, round(raw_count)))
     return scene_count
+
+
+def apply_exact_durations(scenes: list, target_duration: float) -> list:
+    """Evenly distribute exact target duration across scenes, resolving rounding differences."""
+    count = len(scenes)
+
+    if count == 0:
+        return scenes
+
+    base = target_duration / count
+
+    for i, scene in enumerate(scenes):
+        scene["duration"] = round(base, 2)
+
+    # Correct rounding difference
+    total = sum(scene["duration"] for scene in scenes)
+    difference = round(target_duration - total, 2)
+
+    scenes[-1]["duration"] = round(
+        scenes[-1]["duration"] + difference,
+        2
+    )
+
+    return scenes
 
 
 def calculate_scene_durations(
@@ -65,28 +89,23 @@ def calculate_scene_durations(
 ) -> List[float]:
     """
     Distribute the target duration across scenes according to importance weights,
-    ensuring each scene is between 3.0s and 10.0s and sum equals target_duration.
+    guaranteeing that the sum strictly equals target_duration.
     """
     if num_scenes <= 0:
         return [target_duration]
 
+    dummy_scenes = [{"duration": 0.0} for _ in range(num_scenes)]
+    apply_exact_durations(dummy_scenes, target_duration)
+
     if not importance_weights or len(importance_weights) != num_scenes:
-        # Default balanced curve: Intro (4.5s), Core (5.0s), Hero/Climax (6.0s), Outro (4.5s)
-        base_dur = round(target_duration / num_scenes, 2)
-        durations = [base_dur] * num_scenes
-        diff = round(target_duration - sum(durations), 2)
-        if diff != 0:
-            durations[-1] = round(durations[-1] + diff, 2)
-        return durations
+        return [s["duration"] for s in dummy_scenes]
 
     total_weight = sum(importance_weights)
     if total_weight <= 0:
         total_weight = 1.0
 
     durations = [round((w / total_weight) * target_duration, 2) for w in importance_weights]
-    # Clamp minimum duration to 3.0s
-    durations = [max(3.0, d) for d in durations]
-    # Re-normalize to exact target duration
+    durations = [max(2.0, d) for d in durations]
     scale = target_duration / sum(durations)
     durations = [round(d * scale, 2) for d in durations]
     diff = round(target_duration - sum(durations), 2)
@@ -104,52 +123,79 @@ def estimate_narration_duration(text: str, speech_rate: float = WORDS_PER_SECOND
 
 def calculate_max_word_budget(duration_seconds: float, speech_rate: float = WORDS_PER_SECOND_STANDARD) -> int:
     """Calculate the maximum word count for a scene duration to prevent rushed audio."""
-    return max(5, int(duration_seconds * speech_rate))
+    return max(4, int(duration_seconds * speech_rate))
 
 
-PLANNING_PROMPT_TEMPLATE = """
-You are an expert AI video director and cinematographic planner.
+VIDEO_SCENE_SYSTEM_PROMPT = """\
+You are a STRICT source-grounded AI video storyboard generator.
 
-Plan a structured video of EXACTLY {target_duration} seconds consisting of EXACTLY {num_scenes} scenes.
+Your primary responsibility is CONTENT FAITHFULNESS.
 
-TARGET SPECIFICATIONS:
-- Total Target Duration: {target_duration} seconds
-- Exact Number of Scenes: {num_scenes}
-- Pacing: {pacing} (~{avg_duration}s per scene)
-- Language: {language}
-- Tone: {tone}
-- Audience: {audience}
+The generated video MUST represent the user's source content.
+Do NOT invent unrelated topics, technologies, products, companies,
+people, locations, or concepts.
+
+CORE RULES:
+
+1. Read and understand the complete source content first.
+
+2. Extract the important factual concepts from the source.
+
+3. Create scenes ONLY from those extracted concepts.
+
+4. Every scene MUST contain at least one source_fact.
+
+5. The visual_prompt MUST visually represent the source_fact.
+
+6. The narration MUST explain the same source_fact.
+
+7. The on_screen_text MUST describe the actual subject of the scene.
+
+8. NEVER introduce an unrelated concept simply because it looks
+   visually interesting or futuristic.
+
+9. Do not hallucinate AI, servers, data centers, autonomous agents,
+   enterprise systems, robots, or other technology unless they are
+   explicitly supported by the source.
+
+10. Preserve the meaning of the original source.
+
+11. Cover all major concepts from the source across the scenes.
+
+12. Maintain logical progression:
+    introduction -> key concepts -> conclusion.
+
+13. If the source contains 3 major concepts, prefer creating scenes
+    around those 3 concepts instead of inventing additional concepts.
+
+14. The source content has higher priority than visual creativity.
 
 SOURCE CONTENT:
-{content}
+{source_text}
 
-CRITICAL RULES FOR EACH SCENE:
-1. `scene_number`: 1 to {num_scenes}.
-2. `duration`: Scene duration in seconds. The sum of all scene durations MUST equal {target_duration}.
-3. `visual_importance`: Float between 0.5 and 1.0 (Hero statistics / key discoveries = 0.9-1.0; Intro/Outro = 0.7; Background = 0.6).
-4. `visual_tier`: "HIGH", "MEDIUM", or "LOW".
-5. `narration`: Concise voiceover text (MUST NOT exceed max word limit of ~12-15 words per scene).
-6. `visual_prompt`: Detailed photorealistic cinematic description (camera angle, lighting, subject, atmosphere). NO readable text in image.
-7. `on_screen_text`: Punchy headline (max 6 words).
-8. `transition_type`: "crossfade", "fade", "wipe", or "cut".
+TARGET DURATION:
+{target_duration}
 
-RETURN ONLY VALID JSON matching this structure:
+PACING:
+{pacing}
+
+Return ONLY valid JSON matching this schema:
 {{
   "title": "Video Title",
   "scenes": [
     {{
       "scene_number": 1,
-      "duration": 5.0,
-      "visual_importance": 0.8,
-      "visual_tier": "MEDIUM",
-      "narration": "Welcome to the future of smart urban mobility and AI infrastructure.",
-      "visual_prompt": "Cinematic wide angle establishing shot of a futuristic metropolis with smooth luminous traffic flow at dusk, 8k, photorealistic, volumetric lighting",
-      "on_screen_text": "Smart Urban Mobility",
+      "source_fact": "Exact factual concept from source text",
+      "narration": "Voiceover narration explaining the source fact (max {max_words_per_scene} words)",
+      "visual_prompt": "Photorealistic cinematic visual prompt representing the source fact, 8k",
+      "on_screen_text": "Short headline (max 4 words)",
       "transition_type": "crossfade"
     }}
   ]
 }}
 """
+
+PLANNING_PROMPT_TEMPLATE = VIDEO_SCENE_SYSTEM_PROMPT
 
 
 class IntelligentVideoPlanner:
@@ -175,17 +221,20 @@ class IntelligentVideoPlanner:
         """
         target_dur = float(max(10, min(180, target_duration)))
         num_scenes = determine_scene_count(target_dur, pacing)
-        avg_scene_len = round(target_dur / num_scenes, 2)
+        
+        # Duration wins over pacing: calculate exact scene duration from target duration
+        if target_dur:
+            avg_scene_len = round(target_dur / num_scenes, 2)
+        else:
+            avg_scene_len = 5.0
 
-        prompt = PLANNING_PROMPT_TEMPLATE.format(
+        max_words = calculate_max_word_budget(avg_scene_len)
+
+        prompt = VIDEO_SCENE_SYSTEM_PROMPT.format(
             target_duration=int(target_dur),
-            num_scenes=num_scenes,
             pacing=pacing,
-            avg_duration=avg_scene_len,
-            language=language,
-            tone=tone,
-            audience=audience,
-            content=content.strip()
+            max_words_per_scene=max_words,
+            source_text=content.strip()
         )
 
         planned_scenes_raw = []
@@ -193,18 +242,18 @@ class IntelligentVideoPlanner:
 
         # Try LLM-driven planning
         try:
-            raw_response = generate_with_qwen(prompt)
+            raw_response = generate_with_qwen(prompt, num_predict=1200, timeout=45)
             data = cls._extract_json(raw_response)
             if isinstance(data, dict):
                 video_title = data.get("title", video_title)
                 scenes = data.get("scenes", [])
-                if isinstance(scenes, list) and len(scenes) >= 3:
+                if isinstance(scenes, list) and len(scenes) >= 2:
                     planned_scenes_raw = scenes[:num_scenes]
         except Exception as e:
-            logger.warning(f"IntelligentVideoPlanner LLM call failed: {e}. Using deterministic planning.")
+            logger.warning(f"IntelligentVideoPlanner LLM call failed: {e}. Using intelligent deterministic planning.")
 
-        # If LLM didn't return adequate scenes, construct deterministic plan
-        if len(planned_scenes_raw) < 3:
+        # If LLM didn't return adequate scenes, construct rich domain-aware deterministic plan
+        if len(planned_scenes_raw) < 2:
             planned_scenes_raw = cls._build_deterministic_scenes(
                 content=content,
                 num_scenes=num_scenes,
@@ -212,7 +261,7 @@ class IntelligentVideoPlanner:
                 source_facts=source_facts
             )
 
-        # Build fully calibrated PlannedScene models
+        # Build fully calibrated PlannedScene models with exact durations
         planned_scenes = cls._calibrate_scenes(
             scenes_raw=planned_scenes_raw,
             num_scenes=num_scenes,
@@ -254,8 +303,8 @@ class IntelligentVideoPlanner:
                     "duration": 5.0,
                     "visual_importance": 0.8,
                     "visual_tier": "MEDIUM",
-                    "narration": f"Continuing the key insights and verified findings in scene {idx}.",
-                    "visual_prompt": f"Cinematic detailed visual representing technological progress and insights, 8k",
+                    "narration": f"Continuing verified insights in scene {idx}.",
+                    "visual_prompt": f"cinematic high-tech visual representing technological progress, photorealistic, 8k",
                     "on_screen_text": "Key Insight",
                     "transition_type": "crossfade"
                 })
@@ -268,7 +317,9 @@ class IntelligentVideoPlanner:
             w = float(s.get("visual_importance", 0.8))
             weights.append(max(0.5, min(1.0, w)))
 
-        durations = calculate_scene_durations(target_duration, num_scenes, weights)
+        # Enforce exact durations distributed across scenes summing to target_duration
+        apply_exact_durations(scenes_raw, target_duration)
+        durations = [float(s["duration"]) for s in scenes_raw]
 
         calibrated_scenes: List[PlannedScene] = []
         current_time = 0.0
@@ -278,8 +329,16 @@ class IntelligentVideoPlanner:
             end_t = round(current_time + dur, 2)
             current_time = end_t
 
-            narration = sc.get("narration", f"Scene {i} narration.")
+            narration = str(sc.get("narration", f"Scene {i} narration.")).strip()
             max_words = calculate_max_word_budget(dur)
+            
+            # Ensure narration strictly respects word budget to avoid stretching duration
+            words = narration.split()
+            if len(words) > max_words:
+                narration = " ".join(words[:max_words]).rstrip(" ,;:—-\t\n")
+                if not narration.endswith((".", "!", "?")):
+                    narration += "."
+            
             est_dur = estimate_narration_duration(narration)
 
             importance = round(weights[i - 1], 2)
@@ -299,7 +358,7 @@ class IntelligentVideoPlanner:
                 narration=narration,
                 estimated_narration_duration=est_dur,
                 max_word_count=max_words,
-                visual_prompt=sc.get("visual_prompt", "Cinematic photorealistic shot, 8k"),
+                visual_prompt=sc.get("visual_prompt", "cinematic photorealistic shot, 8k"),
                 on_screen_text=sc.get("on_screen_text", f"Scene {i}"),
                 start_time=start_t,
                 end_time=end_t,
@@ -320,69 +379,93 @@ class IntelligentVideoPlanner:
         target_duration: float,
         source_facts: Optional[List[Dict[str, Any]]] = None
     ) -> List[Dict[str, Any]]:
-        """Construct deterministic scenes from facts or content sentences."""
+        """Construct strictly source-grounded deterministic scenes directly from source content."""
         scenes = []
+        clean_content = content.strip() if content else "Grounded visual storytelling overview."
+        
+        avg_dur = target_duration / num_scenes
+        word_budget = calculate_max_word_budget(avg_dur)
 
-        # If we have structured facts
+        # 1. If structured facts are provided, use them directly
         if source_facts and len(source_facts) > 0:
             facts_to_use = source_facts[:num_scenes]
-            # Intro
-            scenes.append({
-                "scene_number": 1,
-                "visual_importance": 0.85,
-                "visual_tier": "HIGH",
-                "narration": f"Here are the essential verified findings and core discoveries.",
-                "visual_prompt": f"Cinematic dynamic establishing shot of modern technology landscape, 8k, volumetric lighting",
-                "on_screen_text": "Executive Overview",
-                "transition_type": "crossfade",
-                "source_facts": [facts_to_use[0].get("id", "F001")]
-            })
-
-            for idx, fact in enumerate(facts_to_use[:num_scenes - 2], 2):
+            for idx, fact in enumerate(facts_to_use, 1):
                 stmt = fact.get("statement", f"Core metric and fact {idx}.")
                 imp = float(fact.get("importance", 0.8))
+                words = stmt.split()
+                narr = " ".join(words[:word_budget]) if len(words) > word_budget else stmt
+                narr = narr.rstrip(" ,;:—-\t\n")
+                if not narr.endswith((".", "!", "?")):
+                    narr += "."
+
                 scenes.append({
                     "scene_number": idx,
+                    "source_fact": stmt,
                     "visual_importance": imp,
                     "visual_tier": "HIGH" if imp >= 0.85 else "MEDIUM",
-                    "narration": stmt,
-                    "visual_prompt": f"Cinematic visual illustrating {stmt[:60]}, sharp focus, 8k, high detail",
-                    "on_screen_text": fact.get("category", "Key Finding"),
-                    "transition_type": "crossfade",
+                    "narration": narr,
+                    "visual_prompt": f"cinematic detailed shot representing {stmt[:60].lower().rstrip('.')}, 8k, photorealistic, sharp focus",
+                    "on_screen_text": fact.get("category", f"Key Point {idx}"),
+                    "transition_type": "crossfade" if idx < num_scenes else "fade",
                     "source_facts": [fact.get("id", f"F00{idx}")]
                 })
 
-            # Outro
+            apply_exact_durations(scenes, target_duration)
+            return scenes
+
+        # 2. Extract source facts / clauses from user text
+        clause_splits = re.split(
+            r"(?:[\.\!\?\n]+|;\s*|\s*—\s*|,\s*(?:and|by|with|integrating|featuring|enabling|including|powered by|while)\s*|,\s*|\s+(?:by integrating|by using|powered by|integrating|featuring|enabling|including|as well as)\s+)",
+            clean_content,
+            flags=re.IGNORECASE
+        )
+        meaningful_clauses = [c.strip() for c in clause_splits if len(c.strip()) > 4]
+        if not meaningful_clauses:
+            meaningful_clauses = [clean_content]
+
+        for idx in range(1, num_scenes + 1):
+            if idx <= len(meaningful_clauses):
+                fact_clause = meaningful_clauses[idx - 1]
+            else:
+                fact_clause = meaningful_clauses[(idx - 1) % len(meaningful_clauses)]
+
+            # Clean and format
+            fact_clause = fact_clause[0].upper() + fact_clause[1:] if len(fact_clause) > 1 else fact_clause
+            
+            # Formulate concise narration strictly under word budget
+            words = fact_clause.split()
+            if len(words) > word_budget:
+                narr_text = " ".join(words[:word_budget]).rstrip(" ,;:—-\t\n")
+            else:
+                narr_text = fact_clause.rstrip(" ,;:—-\t\n")
+            if not narr_text.endswith((".", "!", "?")):
+                narr_text += "."
+
+            # Create punchy headline from clause
+            headline = " ".join(words[:min(3, len(words))]).title()
+
+            # Formulate strictly grounded visual prompt representing the exact source fact
+            if idx == 1:
+                v_prompt = f"cinematic establishing shot of {fact_clause.lower().rstrip('.')}, 8k, photorealistic, sharp focus"
+            elif idx == num_scenes:
+                v_prompt = f"cinematic detailed closing shot representing {fact_clause.lower().rstrip('.')}, dramatic lighting, 8k, photorealistic"
+            else:
+                v_prompt = f"detailed close-up visualization of {fact_clause.lower().rstrip('.')}, high detail, 8k, sharp focus, photorealistic"
+
+            imp = 0.9 if (idx == 1 or idx == 2) else 0.75
             scenes.append({
-                "scene_number": num_scenes,
-                "visual_importance": 0.75,
-                "visual_tier": "MEDIUM",
-                "narration": "Stay informed as these technological advancements transform our world.",
-                "visual_prompt": "Cinematic closing frame with glowing futuristic technology horizon, 8k",
-                "on_screen_text": "The Future Ahead",
-                "transition_type": "fade",
+                "scene_number": idx,
+                "source_fact": fact_clause,
+                "visual_importance": imp,
+                "visual_tier": "HIGH" if imp >= 0.85 else "MEDIUM",
+                "narration": narr_text,
+                "visual_prompt": v_prompt,
+                "on_screen_text": headline,
+                "transition_type": "crossfade" if idx < num_scenes else "fade",
                 "source_facts": []
             })
-        else:
-            # Split sentences
-            sentences = [s.strip() for s in re.split(r"[.!?\n]+", content) if len(s.strip()) > 10]
-            if not sentences:
-                sentences = ["Discover the future of modern innovation and smart technology."]
 
-            for idx in range(1, num_scenes + 1):
-                sentence = sentences[(idx - 1) % len(sentences)]
-                imp = 0.9 if idx == 2 else (0.8 if idx == 1 else 0.75)
-                scenes.append({
-                    "scene_number": idx,
-                    "visual_importance": imp,
-                    "visual_tier": "HIGH" if imp >= 0.85 else "MEDIUM",
-                    "narration": sentence,
-                    "visual_prompt": f"Cinematic photorealistic shot illustrating {sentence[:50]}, 8k, detailed lighting",
-                    "on_screen_text": f"Insight {idx}",
-                    "transition_type": "crossfade" if idx < num_scenes else "fade",
-                    "source_facts": []
-                })
-
+        apply_exact_durations(scenes, target_duration)
         return scenes
 
     @classmethod
@@ -447,25 +530,57 @@ class IntelligentVideoPlanner:
 
     @classmethod
     def _extract_json(cls, raw: str) -> Dict[str, Any]:
-        """Extract clean JSON object from LLM response string."""
+        """Extract clean JSON object from LLM response string with robust repair."""
         raw_clean = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+        if "<think>" in raw_clean and "</think>" not in raw_clean:
+            brace_positions = [pos for pos in (raw_clean.find("{"), raw_clean.find("[")) if pos != -1]
+            if brace_positions:
+                raw_clean = raw_clean[min(brace_positions):].strip()
+
         raw_clean = re.sub(r"^```(?:json)?\s*", "", raw_clean, flags=re.IGNORECASE).strip()
         raw_clean = re.sub(r"\s*```$", "", raw_clean, flags=re.IGNORECASE).strip()
 
+        # 1. Direct parse attempt
         try:
             res = json.loads(raw_clean)
             if isinstance(res, dict):
                 return res
+            if isinstance(res, list):
+                return {"scenes": res}
         except Exception:
             pass
 
+        # 2. Substring extraction
         start = raw_clean.find("{")
         end = raw_clean.rfind("}")
         if start != -1 and end != -1 and end > start:
+            snippet = raw_clean[start:end + 1]
             try:
-                res = json.loads(raw_clean[start:end + 1])
+                res = json.loads(snippet)
                 if isinstance(res, dict):
                     return res
+            except Exception:
+                pass
+
+            # Auto-repair trailing commas
+            repaired = re.sub(r",\s*([\]}])", r"\1", snippet)
+            try:
+                res = json.loads(repaired)
+                if isinstance(res, dict):
+                    return res
+            except Exception:
+                pass
+
+        # 3. Array substring extraction
+        start_arr = raw_clean.find("[")
+        end_arr = raw_clean.rfind("]")
+        if start_arr != -1 and end_arr != -1 and end_arr > start_arr:
+            snippet = raw_clean[start_arr:end_arr + 1]
+            repaired = re.sub(r",\s*([\]}])", r"\1", snippet)
+            try:
+                res = json.loads(repaired)
+                if isinstance(res, list):
+                    return {"scenes": res}
             except Exception:
                 pass
 

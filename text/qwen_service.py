@@ -28,15 +28,15 @@ def _num_predict_for_prompt(prompt: str) -> int:
         return 220
     if "executive summary" in lowered or "summary" in lowered:
         return 220
-    if "storyboard" in lowered or "video producer" in lowered:
-        return 450
+    if "storyboard" in lowered or "video producer" in lowered or "video" in lowered or "planning" in lowered:
+        return 1600
     if "presentation" in lowered or "slide deck" in lowered or "powerpoint" in lowered or "pptx" in lowered:
         return 1200
     if "translator" in lowered or "translate fluently" in lowered:
         return 250
     if "knowledge engineering" in lowered or "atomic facts" in lowered:
         return 300
-    return 250
+    return 350
 
 
 def generate_with_qwen(prompt: str, timeout=None, num_predict=None) -> str:

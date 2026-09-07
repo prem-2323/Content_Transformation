@@ -1,23 +1,11 @@
 1
-00:00:00,000 --> 00:00:03,520
-QuantumSecure platform v3
+00:00:00,000 --> 00:00:10,890
+Artificial intelligence is revolutionizing modern manufacturing with automated robotic precision, predictive maintenance algorithms, and autonomous supply chains
 
 2
-00:00:03,520 --> 00:00:07,670
-4 delivers 38% lower latency
+00:00:10,890 --> 00:00:21,780
+Artificial intelligence is revolutionizing modern manufacturing with automated robotic precision, predictive maintenance algorithms, and autonomous supply chains
 
 3
-00:00:07,670 --> 00:00:11,190
-QuantumSecure platform v3
-
-4
-00:00:11,190 --> 00:00:15,340
-4 delivers 38% lower latency
-
-5
-00:00:15,340 --> 00:00:18,860
-QuantumSecure platform v3
-
-6
-00:00:18,860 --> 00:00:23,010
-4 delivers 38% lower latency
+00:00:21,780 --> 00:00:32,670
+Artificial intelligence is revolutionizing modern manufacturing with automated robotic precision, predictive maintenance algorithms, and autonomous supply chains

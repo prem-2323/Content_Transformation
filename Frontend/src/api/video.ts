@@ -96,4 +96,14 @@ export const videoApi = {
     const base = getApiBaseUrl() || 'http://localhost:8000';
     return `${base.replace(/\/+$/, '')}/video/${filename}`;
   },
+
+  getSubtitleUrl: (filenameOrPath: string) => {
+    if (!filenameOrPath) return '';
+    if (filenameOrPath.startsWith('http://') || filenameOrPath.startsWith('https://')) {
+      return filenameOrPath;
+    }
+    const filename = filenameOrPath.split(/[\\/]/).pop() ?? filenameOrPath;
+    const base = getApiBaseUrl() || 'http://localhost:8000';
+    return `${base.replace(/\/+$/, '')}/video/${filename}`;
+  },
 };
