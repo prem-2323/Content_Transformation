@@ -8,7 +8,6 @@ import { ContentIntelligence } from './components/ContentIntelligence';
 import { HistoryWorkspace } from './components/HistoryWorkspace';
 import { SmartChatbot } from './components/SmartChatbot';
 import { ApiExplorer } from './components/ApiExplorer';
-import { MultimodalPdfStudio } from './components/MultimodalPdfStudio';
 import { VisualStudioWrapper } from './components/VisualStudioWrapper';
 import { VideoStudioWrapper } from './components/VideoStudioWrapper';
 import { QualityValidationWrapper } from './components/QualityValidationWrapper';
@@ -248,15 +247,6 @@ export default function App() {
               {activeTab === 'intelligence' && (
                 <ContentIntelligence
                   transformationResult={transformationResult}
-                />
-              )}
-
-              {activeTab === 'multimodal' && (
-                <MultimodalPdfStudio
-                  onCompleteResult={(res) => {
-                    setTransformationResult(res);
-                    setActiveTab('results');
-                  }}
                 />
               )}
 

@@ -22,7 +22,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
       items: [
         { id: 'transform', label: 'Transform Engine', faIcon: 'fa-solid fa-wand-magic-sparkles' },
         { id: 'results', label: 'Results Workspace', faIcon: 'fa-solid fa-file-lines' },
-        { id: 'multimodal', label: 'PDF Studio', faIcon: 'fa-solid fa-file-pdf' },
       ]
     },
     {
