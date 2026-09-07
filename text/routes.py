@@ -55,10 +55,22 @@ Return ONLY valid JSON matching this exact structure:
 """,
 
     "summary": """
-Create a clear executive summary.
+Summarize ONLY the information provided in the source text.
+
+Rules:
+1. Do not add facts, opinions, assumptions, recommendations, or conclusions that are not present in the source.
+2. Do not invent business, organizational, strategic, financial, or technical implications.
+3. Do not use generic filler such as "aligned with organizational objectives" or "actionable advancements."
+4. Preserve the original meaning and context.
+5. Remove repetition and unnecessary details.
+6. If a section such as Strategic Implication, Recommendations, or Conclusion is not supported by the source, OMIT that section.
+7. Do not force the output into a fixed template.
+8. Keep the summary concise.
+9. Every important statement in the output must be traceable to the source text.
+
 Return ONLY valid JSON matching this exact structure:
 {
-  "content": "Executive summary text including key points and conclusions."
+  "content": "Concise, grounded summary derived strictly from the source text."
 }
 """,
 
@@ -310,31 +322,6 @@ def _extract_meaningful_text(candidate: str) -> str:
     if not cleaned:
         return ""
 
-    stop_markers = [
-        "however",
-        "but note",
-        "but the instruction says",
-        "alternative:",
-        "let me check",
-        "steps for",
-        "proposed summary text",
-        "the source says",
-        "we need to",
-        "after research",
-        "why this works",
-        "what this means",
-    ]
-
-    lower = cleaned.lower()
-    best_index = -1
-    for marker in stop_markers:
-        idx = lower.find(marker)
-        if idx != -1 and (best_index == -1 or idx < best_index):
-            best_index = idx
-
-    if best_index != -1:
-        cleaned = cleaned[:best_index].strip()
-
     if "proposed summary text:" in cleaned.lower():
         sub = re.search(r"(?is)proposed summary text\s*:\s*(.+)", cleaned)
         if sub:
@@ -342,8 +329,9 @@ def _extract_meaningful_text(candidate: str) -> str:
 
     cleaned = re.sub(r"(?is)^\s*(we are given|the task is|the source content|here is|below is|as an ai|i am).*?:\s*", "", cleaned)
     cleaned = re.sub(r"(?is)^\s*[\"'].*?[\"']\s*\n?", "", cleaned)
-    cleaned = re.sub(r"\s+", " ", cleaned).strip()
-    return cleaned.strip("\n ")
+    cleaned = re.sub(r"\r\n", "\n", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
 
 
 def _build_infographic_fallback(text: str) -> dict:
@@ -513,15 +501,41 @@ def _build_presentation_fallback(text: str) -> dict:
     })
 
 
+def _build_summary_fallback(text: str, audience: str = "General public", tone: str = "Professional") -> str:
+    """Build a concise, fact-grounded summary derived strictly from source text without generic filler."""
+    clean_text = _extract_meaningful_text(text) or text.strip()
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", clean_text) if len(s.strip()) > 8]
+    if not sentences:
+        return clean_text or "No substantive content provided."
+
+    if len(sentences) <= 2:
+        return " ".join(sentences)
+
+    overview = " ".join(sentences[:2])
+    key_points = [f"• {s}" for s in sentences[2:6] if s not in overview]
+
+    if key_points:
+        return f"{overview}\n\n**Key Highlights:**\n" + "\n".join(key_points)
+    return overview
+
+
 def _contains_prompt_leakage(value) -> bool:
     text = str(value).lower()
     return any(marker in text for marker in [
-        "source content:",
+        "source content",
         "output type:",
+        "transformation type:",
         "audience:",
         "detail level:",
         "steps:",
-        "we are transforming the source",
+        "we are transforming",
+        "we are given",
+        "we must strictly ground",
+        "we must return",
+        "the task is",
+        "uckr facts",
+        "critical output constraints",
+        "transformation instructions",
     ])
 
 
@@ -573,18 +587,22 @@ def parse_output_content(generated_text: str, output_type: str, source_text: str
                 return validate_and_format_twitter(source_text)
             if ot_lower == "email":
                 return f"Subject: Announcement: Key Insights & Updates\n\nDear Team,\n\n{source_text}\n\nBest regards,\nLeadership Team"
+            if ot_lower == "summary":
+                return _build_summary_fallback(source_text)
             return source_text
 
         # Guard: model sometimes echoes the JSON schema placeholder
         # ({"content": "string"}) instead of generating. Fall back to
         # source-grounded output rather than returning garbage.
         if _is_placeholder_output(final_text) or (
-            source_text and len(final_text) < 15 < len(source_text)
+            source_text and len(final_text) < 30 < len(source_text)
         ):
             return _fallback_output(ot_lower, source_text, target_duration=target_duration)
 
         final_text = _extract_meaningful_text(final_text) or cleaned_text
-        if _is_placeholder_output(final_text):
+        if _is_placeholder_output(final_text) or (
+            source_text and len(final_text) < 30 < len(source_text)
+        ):
             return _fallback_output(ot_lower, source_text, target_duration=target_duration)
         if ot_lower == "twitter":
             return validate_and_format_twitter(final_text)
@@ -620,6 +638,8 @@ def parse_output_content(generated_text: str, output_type: str, source_text: str
 
 
 def _fallback_output(output_type: str, source_text: str, target_duration: int = 30):
+    if output_type == "summary":
+        return _build_summary_fallback(source_text)
     if output_type == "infographic":
         return _build_infographic_fallback(source_text)
     if output_type == "video_script":
@@ -882,6 +902,10 @@ CRITICAL OUTPUT CONSTRAINTS:
         try:
             generated_text = generate_with_qwen(prompt)
             parsed_output = parse_output_content(generated_text, ot, valid_text, target_duration=target_dur)
+            if ot == "summary":
+                summary_str = parsed_output if isinstance(parsed_output, str) else str(parsed_output)
+                if _contains_prompt_leakage(summary_str) or summary_str.strip() == valid_text.strip() or len(summary_str) < 30:
+                    parsed_output = _build_summary_fallback(valid_text, audience=request.audience, tone=request.tone)
             if ot == "infographic" and _infographic_is_contaminated(parsed_output, valid_text):
                 parsed_output = _build_infographic_fallback(valid_text)
             if ot == "advisory":
@@ -989,6 +1013,9 @@ Transform the extracted document content according to the user's requirements.
 SOURCE CONTENT:
 {valid_text}
 
+CURRENT SOURCE UCKR FACTS:
+{_source_fact_catalog(valid_text)}
+
 OUTPUT TYPE:
 {ot}
 
@@ -1010,17 +1037,26 @@ OBJECTIVE:
 TRANSFORMATION INSTRUCTIONS:
 {output_instruction}
 
-Important:
-- Preserve factual information from the source.
-- Do not invent important facts.
-- Follow the requested language.
-- Follow the requested tone and audience.
-- Return only the transformed content.
+The transformation instructions above are specific to the selected output type.
+Follow them as the controlling format and rewrite the source accordingly.
+
+CRITICAL OUTPUT CONSTRAINTS:
+- Return ONLY valid JSON matching the requested structure.
+- Do not include reasoning or chain of thought.
+- Do not include analysis or commentary.
+- Do not include explanations.
+- Do not include markdown code fences (```json).
+- Preserve factual information from the source text.
 """
 
             try:
                 generated_text = generate_with_qwen(prompt)
-                outputs_dict[ot] = parse_output_content(generated_text, ot, valid_text, target_duration=duration)
+                parsed_res = parse_output_content(generated_text, ot, valid_text, target_duration=duration)
+                if ot == "summary":
+                    summary_str = parsed_res if isinstance(parsed_res, str) else str(parsed_res)
+                    if _contains_prompt_leakage(summary_str) or summary_str.strip() == valid_text.strip() or len(summary_str) < 30:
+                        parsed_res = _build_summary_fallback(valid_text, audience=audience, tone=tone)
+                outputs_dict[ot] = parsed_res
             except QwenServiceError:
                 outputs_dict[ot] = _fallback_output(ot, valid_text, target_duration=duration)
 

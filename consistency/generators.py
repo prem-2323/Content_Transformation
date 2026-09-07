@@ -4,6 +4,7 @@ import logging
 from typing import Dict, Any, List, Optional
 
 from text.qwen_service import generate_with_qwen, QwenServiceError
+from validation import clean_reasoning_and_leakage
 from .schemas import (
     UCKR,
     OutputGenerationConfig,
@@ -160,7 +161,7 @@ def _attach_advisory_evidence(
 # ---------------------------------------------------------------------------
 
 SUMMARY_PROMPT = """
-You are a precise technical writer creating a grounded executive summary from a Unified Content Knowledge Representation (UCKR).
+Summarize ONLY the information provided in the GROUNDED FACTS CATALOG.
 
 GROUNDED FACTS CATALOG:
 {facts_catalog}
@@ -170,13 +171,21 @@ AUDIENCE: {audience}
 TONE: {tone}
 DETAIL LEVEL: {detail_level}
 
-TASK:
-Write a high-impact executive summary and key takeaways.
-EVERY claim you make MUST cite the specific fact IDs used in the `source_facts` list.
+RULES:
+1. Do not add facts, opinions, assumptions, recommendations, or conclusions that are not present in the source.
+2. Do not invent business, organizational, strategic, financial, or technical implications.
+3. Do not use generic filler such as "aligned with organizational objectives" or "actionable advancements."
+4. Preserve the original meaning and context.
+5. Remove repetition and unnecessary details.
+6. If a section such as Strategic Implication, Recommendations, or Conclusion is not supported by the source, OMIT that section.
+7. Do not force the output into a fixed template.
+8. Keep the summary concise.
+9. Every claim you make MUST cite the specific fact IDs used in the `source_facts` list.
+10. DO NOT include planning commentary, reasoning steps, or conversational preamble.
 
 RETURN ONLY VALID JSON matching this structure:
 {{
-  "text": "Comprehensive executive summary paragraph...",
+  "text": "Concise grounded summary paragraph derived strictly from source facts...",
   "key_takeaways": [
     "Key takeaway point 1",
     "Key takeaway point 2",
@@ -208,7 +217,7 @@ class SummaryGenerator:
                     # Ensure valid fact IDs
                     valid_ids = [f.id for f in uckr.facts]
                     cited = [fid for fid in data.get("source_facts", []) if fid in valid_ids] or [f.id for f in uckr.facts[:3]]
-                    summary_text = data["text"]
+                    summary_text = clean_reasoning_and_leakage(data["text"]) or data["text"]
                     return GroundedSummary(
                         text=summary_text,
                         key_takeaways=data.get("key_takeaways", []),
@@ -218,23 +227,13 @@ class SummaryGenerator:
             except Exception as e:
                 logger.warning(f"SummaryGenerator LLM fallback: {e}")
 
-        # Deterministic Grounded Fallback with Audience Calibration
+        # Deterministic Grounded Fallback derived strictly from facts
         top_facts = sorted(uckr.facts, key=lambda x: x.importance, reverse=True)[:4]
         summary_sentences = [f.statement for f in top_facts]
         takeaways = [f"• {f.statement}" for f in top_facts[:3]]
         
-        aud_lower = (config.audience or "professional").lower()
-        if "exec" in aud_lower or "c-suite" in aud_lower or "leadership" in aud_lower:
-            intro_prefix = f"Executive Strategic Briefing on {uckr.core_topic}:"
-            footer = "Strategic Implication: Prioritize operational integration and capital allocation based on verified capabilities."
-        elif "tech" in aud_lower or "eng" in aud_lower or "dev" in aud_lower:
-            intro_prefix = f"Technical Implementation Overview ({uckr.core_topic}):"
-            footer = "Architectural Note: System parameters and benchmarks validated against source documentation."
-        else:
-            intro_prefix = f"Understanding {uckr.core_topic}:"
-            footer = "Key takeaway: These innovations represent significant advancements across the sector."
-
-        fallback_text = f"{intro_prefix} {uckr.summary} " + " ".join(summary_sentences) + f" {footer}"
+        fallback_text = (uckr.summary or "") + " " + " ".join(summary_sentences)
+        fallback_text = fallback_text.strip()
         return GroundedSummary(
             text=fallback_text,
             key_takeaways=takeaways,

@@ -160,10 +160,25 @@ def clean_reasoning_and_leakage(raw_text: str) -> str:
         cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r"\s*```$", "", cleaned)
 
-    # Strip conversational preambles and leading thinking text that sometimes leaks.
-    cleaned = re.sub(r"(?is)^(here is|sure|certainly|below is|the following is|here are|let me help).*?:\s*", "", cleaned)
-    cleaned = re.sub(r"(?is)^analysis\s*:\s*", "", cleaned)
-    cleaned = re.sub(r"(?is)^response\s*:\s*", "", cleaned)
+    # Iteratively strip conversational preambles and leading thinking text that sometimes leaks.
+    prev = None
+    while prev != cleaned:
+        prev = cleaned
+        cleaned = re.sub(r"(?is)^\s*(okay|sure|certainly|alright),?\s*(the user wants|let'?s|i need to|i will|we are given|we need to|we are to|let me).*?(\n\n|\.\s+|\n)", "", cleaned)
+        cleaned = re.sub(r"(?is)^\s*(we are given|we are to create|the task is to|the task is|the user wants|in this task|to summarize the provided|as requested|based on the source content).*?:\s*", "", cleaned)
+        cleaned = re.sub(r"(?is)^\s*steps:\s*(\n\s*\d+\..*?)+(?=\n\n|\Z)", "", cleaned)
+        cleaned = re.sub(r"(?is)^\s*(?:\d+\.\s+)?we (?:are to|must|need to|should|will)\s+.*?(\n\n|\.\s+|\n)", "", cleaned)
+        cleaned = re.sub(r"(?is)^\s*important\s*:\s*(\n\s*[-*•\d.]\s*.*?)+(?=\n\n|\Z)", "", cleaned)
+        cleaned = re.sub(r"(?is)^\s*let'?s\s+(?:extract|look at|review|break down|analyze|start by|examine).*?(\n\n|\.\s+|\n|:\s*)", "", cleaned)
+        cleaned = re.sub(r"(?is)^\s*-\s*(executive overview|key highlights|strategic implication).*?\n(?:\s*-\s*.*?\n)*", "", cleaned)
+        cleaned = re.sub(r"(?is)^\s*we must (strictly ground|return only|follow).*?\n", "", cleaned)
+        cleaned = re.sub(r"(?is)^\s*source content.*?\n", "", cleaned)
+        cleaned = re.sub(r"(?is)^\s*uckr facts.*?\n", "", cleaned)
+        cleaned = re.sub(r"(?is)^\s*f\d{3}\b:?.*?\n?", "", cleaned)
+        cleaned = re.sub(r"(?is)^(here is|sure|certainly|below is|the following is|here are|let me help).*?:\s*", "", cleaned)
+        cleaned = re.sub(r"(?is)^analysis\s*:\s*", "", cleaned)
+        cleaned = re.sub(r"(?is)^response\s*:\s*", "", cleaned)
+        cleaned = cleaned.strip()
 
     return cleaned.strip()
 
@@ -173,23 +188,36 @@ def extract_json_payload(raw_text: str) -> Union[dict, list, None]:
     Locate and parse JSON structure inside raw model text.
     Handles responses wrapped in code fences or preambles.
     """
-    cleaned = clean_reasoning_and_leakage(raw_text)
-    if not cleaned:
+    if not raw_text or not isinstance(raw_text, str):
         return None
 
-    # Direct json loads attempt
-    try:
-        data = json.loads(cleaned)
-        if isinstance(data, (dict, list)):
-            return data
-    except Exception:
-        pass
+    # First attempt: directly on clean_reasoning_and_leakage
+    cleaned = clean_reasoning_and_leakage(raw_text)
+    if cleaned:
+        try:
+            data = json.loads(cleaned)
+            if isinstance(data, (dict, list)):
+                return data
+        except Exception:
+            pass
 
-    # Regex search for outer JSON object or array bounds
-    first_brace = cleaned.find("{")
-    last_brace = cleaned.rfind("}")
+    # Second attempt: check raw text directly with regex for JSON code fence or boundaries
+    text_to_search = raw_text
+    fence_match = re.search(r"```(?:json)?\s*(\{.*?\}|\[.*?\])\s*```", raw_text, re.DOTALL | re.IGNORECASE)
+    if fence_match:
+        try:
+            data = json.loads(fence_match.group(1).strip())
+            if isinstance(data, (dict, list)):
+                return data
+        except Exception:
+            pass
+
+    # Regex search for outer JSON object or array bounds in cleaned text
+    target_str = cleaned or raw_text
+    first_brace = target_str.find("{")
+    last_brace = target_str.rfind("}")
     if first_brace != -1 and last_brace > first_brace:
-        json_candidate = cleaned[first_brace:last_brace + 1]
+        json_candidate = target_str[first_brace:last_brace + 1]
         try:
             data = json.loads(json_candidate)
             if isinstance(data, (dict, list)):
@@ -197,10 +225,10 @@ def extract_json_payload(raw_text: str) -> Union[dict, list, None]:
         except Exception:
             pass
 
-    first_bracket = cleaned.find("[")
-    last_bracket = cleaned.rfind("]")
+    first_bracket = target_str.find("[")
+    last_bracket = target_str.rfind("]")
     if first_bracket != -1 and last_bracket > first_bracket:
-        json_candidate = cleaned[first_bracket:last_bracket + 1]
+        json_candidate = target_str[first_bracket:last_bracket + 1]
         try:
             data = json.loads(json_candidate)
             if isinstance(data, (dict, list)):
