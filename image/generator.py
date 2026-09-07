@@ -135,7 +135,7 @@ class ImagePipelineSingleton:
             response = self._http_session.post(
                 f"{IMAGE_MODEL_URL.rstrip('/')}/sdapi/v1/txt2img",
                 json=payload,
-                timeout=(3.0, IMAGE_MODEL_TIMEOUT_SECONDS),
+                timeout=(1.5, IMAGE_MODEL_TIMEOUT_SECONDS),
             )
             response.raise_for_status()
             images = response.json().get("images", [])
@@ -148,12 +148,34 @@ class ImagePipelineSingleton:
         except Exception as error:
             print(f"[Image Studio Pipeline Fallback] WebUI offline ({error}). Generating synthetic preview.")
             try:
-                from PIL import Image, ImageDraw
-                img = Image.new("RGB", (width, height), color=(18, 18, 18))
+                from PIL import Image, ImageDraw, ImageFont
+                img = Image.new("RGB", (width, height), color=(15, 23, 42))
                 draw = ImageDraw.Draw(img)
-                draw.rectangle([(20, 20), (width - 20, height - 20)], outline=(30, 215, 96), width=4)
+
+                # Decorative grid
+                grid_step = 64
+                for x in range(0, width, grid_step):
+                    draw.line([(x, 0), (x, height)], fill=(30, 41, 59), width=1)
+                for y in range(0, height, grid_step):
+                    draw.line([(0, y), (width, y)], fill=(30, 41, 59), width=1)
+
+                # Neon Accent Border
+                draw.rectangle([(16, 16), (width - 16, height - 16)], outline=(30, 215, 96), width=3)
+                draw.rectangle([(24, 24), (width - 24, height - 24)], outline=(51, 65, 85), width=1)
+
+                # Center Card
+                card_w, card_h = min(width - 80, 520), 160
+                cx, cy = width // 2, height // 2
+                draw.rectangle([(cx - card_w//2, cy - card_h//2), (cx + card_w//2, cy + card_h//2)], fill=(24, 24, 27), outline=(30, 215, 96), width=2)
+
+                # Text Labels
+                draw.text((cx - card_w//2 + 24, cy - 48), "FASTAPI AI IMAGE GENERATION", fill=(30, 215, 96))
+                clean_p = (prompt[:55] + "...") if len(prompt) > 55 else prompt
+                draw.text((cx - card_w//2 + 24, cy - 12), f'"{clean_p}"', fill=(241, 245, 249))
+                draw.text((cx - card_w//2 + 24, cy + 24), f"Resolution: {width}x{height} | Steps: {steps} | Mode: {self._device.upper()}", fill=(148, 163, 184))
+
                 buf = BytesIO()
-                img.save(buf, format="PNG")
+                img.save(buf, format="PNG", optimize=True)
                 return buf.getvalue()
             except Exception:
                 raise ImageGenerationError("The image model is unavailable.") from error

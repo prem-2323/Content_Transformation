@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { VisualAiStudio } from './VisualAiStudio';
 import { ImageStudio } from './ImageStudio';
-import { Eye, Image as ImageIcon } from 'lucide-react';
+import { Eye, Sparkles } from 'lucide-react';
 
 interface VisualStudioWrapperProps {
   initialSubTab?: 'visual' | 'image';
@@ -50,8 +50,8 @@ export const VisualStudioWrapper: React.FC<VisualStudioWrapperProps> = ({ initia
                 : isDarkMode ? 'text-slate-300 hover:text-white' : 'text-slate-700 hover:text-slate-900'
             }`}
           >
-            <ImageIcon className="w-3.5 h-3.5" />
-            <span>Image Studio</span>
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Generate Image</span>
           </button>
         </div>
       </div>
