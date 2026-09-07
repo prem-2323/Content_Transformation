@@ -13,10 +13,9 @@ interface TransformationFormProps {
 
 export const TransformationForm: React.FC<TransformationFormProps> = ({ onRunTransform, isLoading, onCancel, initialConfig, initialSourceText }) => {
   const { isDarkMode } = useTheme();
-  const [inputType, setInputType] = useState<'text' | 'file' | 'url'>('text');
+  const [inputType, setInputType] = useState<'text' | 'file'>('text');
   const [sourceText, setSourceText] = useState(initialSourceText || '');
   const [file, setFile] = useState<File | null>(null);
-  const [sourceUrl, setSourceUrl] = useState('');
 
   // Configuration state
   const [audience, setAudience] = useState(initialConfig?.audience || 'C-Suite & Enterprise Executives');
@@ -163,18 +162,12 @@ export const TransformationForm: React.FC<TransformationFormProps> = ({ onRunTra
         setFormError('Select a TXT, PDF or DOCX file first.');
         return;
       }
-    } else if (inputType === 'url') {
-      if (!sourceUrl.trim()) {
-        setFormError('Enter a public article URL first — the backend scrapes and transforms it.');
-        return;
-      }
     } else if (!sourceText.trim()) {
       setFormError('Enter source text first — e.g. paste the article to turn into a LinkedIn post.');
       return;
     }
     const payload = {
-      text: inputType === 'url' ? '' : sourceText,
-      url: inputType === 'url' ? sourceUrl.trim() : undefined,
+      text: sourceText,
       audience,
       tone,
       language,
@@ -228,13 +221,6 @@ export const TransformationForm: React.FC<TransformationFormProps> = ({ onRunTra
               >
                 Upload File (PDF/DOCX/TXT)
               </button>
-              <button
-                type="button"
-                onClick={() => setInputType('url')}
-                className={`px-4 py-1.5 rounded-full transition ${inputType === 'url' ? 'bg-[#1ed760] text-black shadow-md' : isDarkMode ? 'text-[#b3b3b3] hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}
-              >
-                Web URL / Media
-              </button>
             </div>
           </div>
 
@@ -279,21 +265,6 @@ export const TransformationForm: React.FC<TransformationFormProps> = ({ onRunTra
                 </span>
                 <span className={`text-xs mt-1 ${isDarkMode ? 'text-[#b3b3b3]' : 'text-slate-500'}`}>Supports multimodal extraction with Gemma 3 4B</span>
               </label>
-            </div>
-          )}
-
-          {inputType === 'url' && (
-            <div>
-              <input
-                type="url"
-                value={sourceUrl}
-                onChange={(e) => setSourceUrl(e.target.value)}
-                placeholder="https://example.com/article-or-report"
-                className={`w-full rounded-full border px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1ed760] transition-colors ${
-                  isDarkMode ? 'border-[#4d4d4d] bg-[#121212] text-white' : 'border-slate-300 bg-slate-50 text-slate-900'
-                }`}
-              />
-              <p className={`mt-1 text-xs ${isDarkMode ? 'text-[#b3b3b3]' : 'text-slate-500'}`}>Enter a public URL for automated web scraping and fact extraction.</p>
             </div>
           )}
         </div>

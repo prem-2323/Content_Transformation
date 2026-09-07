@@ -9,7 +9,7 @@ import { HistoryWorkspace } from './components/HistoryWorkspace';
 import { SmartChatbot } from './components/SmartChatbot';
 import { ApiExplorer } from './components/ApiExplorer';
 import { VisualStudioWrapper } from './components/VisualStudioWrapper';
-import { VideoStudioWrapper } from './components/VideoStudioWrapper';
+import { VideoGenerator } from './components/VideoGenerator';
 import { PresentationStudio } from './components/PresentationStudio';
 import { BottomNavbar } from './components/BottomNavbar';
 import { OpenApiModal } from './components/OpenApiModal';
@@ -252,13 +252,8 @@ export default function App() {
                 <VisualStudioWrapper initialSubTab={activeTab === 'image' ? 'image' : 'visual'} />
               )}
 
-              {(activeTab === 'video_studio' || activeTab === 'video_generator' || activeTab === 'scene' || activeTab === 'video_plan' || activeTab === 'video' || activeTab === 'audio') && (
-                <VideoStudioWrapper initialSubTab={
-                  activeTab === 'scene' ? 'scene' :
-                  activeTab === 'video_plan' ? 'video_plan' :
-                  activeTab === 'video' ? 'video' :
-                  activeTab === 'audio' ? 'audio' : 'video_generator'
-                } />
+              {(activeTab === 'video_studio' || activeTab === 'video_generator') && (
+                <VideoGenerator />
               )}
 
               {activeTab === 'presentation' && (
